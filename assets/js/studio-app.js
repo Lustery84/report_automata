@@ -938,23 +938,23 @@ const GeminiService = {
 
     getModel() {
         const saved = localStorage.getItem(this.STORAGE_MODEL);
-        if (!saved || saved === 'gemini-2.5-flash' || saved.includes('2.5')) {
-            localStorage.setItem(this.STORAGE_MODEL, 'gemini-2.0-flash');
-            return 'gemini-2.0-flash';
+        if (!saved || saved === 'gemini-2.0-flash' || saved === 'models/gemini-2.0-flash') {
+            localStorage.setItem(this.STORAGE_MODEL, 'gemini-2.5-flash');
+            return 'gemini-2.5-flash';
         }
         return saved;
     },
 
     saveModel(model) {
-        let safeModel = model || 'gemini-2.0-flash';
-        if (safeModel.includes('2.5')) safeModel = 'gemini-2.0-flash';
+        let safeModel = model || 'gemini-2.5-flash';
+        if (safeModel === 'gemini-2.0-flash') safeModel = 'gemini-2.5-flash';
         localStorage.setItem(this.STORAGE_MODEL, safeModel);
     },
 
     async testConnection(key, model) {
         const apiKey = (key || this.getApiKey()).trim();
         let apiModel = model || this.getModel();
-        if (apiModel.includes('2.5')) apiModel = 'gemini-2.0-flash';
+        if (apiModel === 'gemini-2.0-flash') apiModel = 'gemini-2.5-flash';
 
         if (!apiKey) {
             throw new Error('Vui lòng nhập API Key trước khi kiểm tra.');
@@ -984,6 +984,14 @@ const GeminiService = {
         if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
             const msg = errData.error?.message || `Lỗi HTTP ${res.status}: ${res.statusText}`;
+            if (msg.includes('no longer available') || msg.includes('not found')) {
+                const match = msg.match(/models\/(gemini-[\w.-]+)/);
+                const recModel = match ? match[1] : (apiModel !== 'gemini-2.5-flash' ? 'gemini-2.5-flash' : 'gemini-1.5-flash');
+                if (recModel && recModel !== apiModel) {
+                    this.saveModel(recModel);
+                    return this.testConnection(key, recModel);
+                }
+            }
             throw new Error(msg);
         }
 
@@ -994,9 +1002,9 @@ const GeminiService = {
     async generateReportStream({ outline, onChunk, onStatus, onDone, onError, signal }) {
         const apiKey = this.getApiKey();
         let model = this.getModel();
-        if (model.includes('2.5')) {
-            model = 'gemini-2.0-flash';
-            this.saveModel('gemini-2.0-flash');
+        if (model === 'gemini-2.0-flash') {
+            model = 'gemini-2.5-flash';
+            this.saveModel('gemini-2.5-flash');
         }
 
         if (!apiKey) {
@@ -1149,16 +1157,20 @@ Hãy xuất bản toàn văn báo cáo bằng định dạng Markdown hoàn ch�
                 const errJson = await response.json().catch(() => ({}));
                 const errText = errJson.error?.message || `Lỗi HTTP ${response.status}: ${response.statusText}`;
 
-                // Self-healing: if model is deprecated or not available, auto-fallback to gemini-2.0-flash
-                if ((errText.includes('no longer available') || errText.includes('not found') || response.status === 404) && model !== 'gemini-2.0-flash') {
-                    console.warn(`Model ${model} unavailable (${errText}). Auto-recovering to gemini-2.0-flash...`);
-                    onStatus && onStatus('Đang tự động chuyển sang model chuẩn Gemini 2.0 Flash...');
-                    this.saveModel('gemini-2.0-flash');
-                    const badge = document.getElementById('report-generation-model-badge');
-                    if (badge) badge.innerText = 'Gemini 2.0 Flash';
-                    const select = document.getElementById('gemini-model-select');
-                    if (select) select.value = 'gemini-2.0-flash';
-                    return this.generateReportStream({ outline, onChunk, onStatus, onDone, onError, signal });
+                // Self-healing: if model is deprecated or not available, auto-fallback to recommended model or gemini-2.5-flash
+                if (errText.includes('no longer available') || errText.includes('not found') || response.status === 404) {
+                    const match = errText.match(/models\/(gemini-[\w.-]+)/);
+                    const targetModel = match ? match[1] : (model !== 'gemini-2.5-flash' ? 'gemini-2.5-flash' : 'gemini-1.5-flash');
+                    if (targetModel && targetModel !== model) {
+                        console.warn(`Model ${model} unavailable (${errText}). Auto-recovering to ${targetModel}...`);
+                        onStatus && onStatus(`Đang tự động chuyển sang model chuẩn ${targetModel}...`);
+                        this.saveModel(targetModel);
+                        const badge = document.getElementById('report-generation-model-badge');
+                        if (badge) badge.innerText = targetModel;
+                        const select = document.getElementById('gemini-model-select');
+                        if (select) select.value = targetModel;
+                        return this.generateReportStream({ outline, onChunk, onStatus, onDone, onError, signal });
+                    }
                 }
                 throw new Error(errText);
             }
@@ -1220,10 +1232,14 @@ Hãy xuất bản toàn văn báo cáo bằng định dạng Markdown hoàn ch�
             if (!stdRes.ok) {
                 const stdErr = await stdRes.json().catch(() => ({}));
                 const stdErrMsg = stdErr.error?.message || streamErr.message;
-                if ((stdErrMsg.includes('no longer available') || stdErrMsg.includes('not found')) && model !== 'gemini-2.0-flash') {
-                    console.warn(`Fallback: Model ${model} unavailable, auto-recovering to gemini-2.0-flash...`);
-                    this.saveModel('gemini-2.0-flash');
-                    return this.generateReportStream({ outline, onChunk, onStatus, onDone, onError, signal });
+                if (stdErrMsg.includes('no longer available') || stdErrMsg.includes('not found') || stdRes.status === 404) {
+                    const match = stdErrMsg.match(/models\/(gemini-[\w.-]+)/);
+                    const targetModel = match ? match[1] : (model !== 'gemini-2.5-flash' ? 'gemini-2.5-flash' : 'gemini-1.5-flash');
+                    if (targetModel && targetModel !== model) {
+                        console.warn(`Fallback: Model ${model} unavailable, auto-recovering to ${targetModel}...`);
+                        this.saveModel(targetModel);
+                        return this.generateReportStream({ outline, onChunk, onStatus, onDone, onError, signal });
+                    }
                 }
                 throw new Error(stdErrMsg);
             }
@@ -1309,7 +1325,7 @@ async function testGeminiConnection() {
     const testLabel = document.getElementById('test-key-label');
 
     const key = input ? input.value.trim() : '';
-    const model = select ? select.value : 'gemini-2.0-flash';
+    const model = select ? select.value : 'gemini-2.5-flash';
 
     if (!key) {
         resultBox.style.display = 'block';
@@ -1330,10 +1346,14 @@ async function testGeminiConnection() {
 
     try {
         await GeminiService.testConnection(key, model);
+        const activeModel = GeminiService.getModel();
+        if (select && select.value !== activeModel) {
+            select.value = activeModel;
+        }
         resultBox.style.background = 'rgba(16, 185, 129, 0.1)';
         resultBox.style.color = '#10b981';
         resultBox.style.border = '1px solid #10b981';
-        resultBox.innerHTML = `<strong>Thành công!</strong> Khóa API hợp lệ. Model <code>${model}</code> đã sẵn sàng sinh báo cáo chất lượng cao.`;
+        resultBox.innerHTML = `<strong>Thành công!</strong> Khóa API hợp lệ. Model <code>${activeModel}</code> đã sẵn sàng sinh báo cáo chất lượng cao.`;
     } catch (err) {
         resultBox.style.background = 'rgba(239, 68, 68, 0.1)';
         resultBox.style.color = '#ef4444';
@@ -1349,7 +1369,7 @@ function saveGeminiKey() {
     const select = document.getElementById('gemini-model-select');
 
     const key = input ? input.value.trim() : '';
-    const model = select ? select.value : 'gemini-2.0-flash';
+    const model = select ? select.value : 'gemini-2.5-flash';
 
     GeminiService.saveApiKey(key);
     GeminiService.saveModel(model);
