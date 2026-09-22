@@ -83,40 +83,52 @@ const AttachmentManager = {
     attachments: [],
 
     init() {
-        const dropZone = document.getElementById('notes-input');
-        if (!dropZone) return;
+        const dropZones = [
+            document.getElementById('notes-input'),
+            document.getElementById('attachment-drop-area')
+        ].filter(Boolean);
 
-        ['dragenter', 'dragover'].forEach(name => {
-            dropZone.addEventListener(name, (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                dropZone.style.borderColor = 'var(--accent)';
-                dropZone.style.background = 'var(--accent-subtle)';
+        dropZones.forEach(zone => {
+            ['dragenter', 'dragover'].forEach(name => {
+                zone.addEventListener(name, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    zone.classList.add('dragover');
+                    if (zone.id === 'notes-input') {
+                        zone.style.borderColor = 'var(--accent)';
+                        zone.style.background = 'var(--accent-subtle)';
+                    }
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(name => {
+                zone.addEventListener(name, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    zone.classList.remove('dragover');
+                    if (zone.id === 'notes-input') {
+                        zone.style.borderColor = '';
+                        zone.style.background = '';
+                    }
+                });
+            });
+
+            zone.addEventListener('drop', (e) => {
+                const files = e.dataTransfer.files;
+                if (files && files.length > 0) {
+                    this.addFiles(files);
+                }
             });
         });
 
-        ['dragleave', 'drop'].forEach(name => {
-            dropZone.addEventListener(name, (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                dropZone.style.borderColor = '';
-                dropZone.style.background = '';
-            });
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            const files = e.dataTransfer.files;
-            if (files && files.length > 0) {
-                this.addFiles(files);
-            }
-        });
-
-        dropZone.addEventListener('paste', (e) => {
+        // Clipboard paste listener (for direct screenshots)
+        window.addEventListener('paste', (e) => {
+            // Ignore if active element is an input outside our form
             const items = (e.clipboardData || window.clipboardData)?.items;
             if (!items) return;
             const filesToHandle = [];
             for (let i = 0; i < items.length; i++) {
-                if (items[i].type.indexOf('image') !== -1) {
+                if (items[i].type && items[i].type.indexOf('image') !== -1) {
                     const blob = items[i].getAsFile();
                     if (blob) {
                         const now = new Date();

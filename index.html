@@ -93,19 +93,30 @@
                 </div>
 
                 <div class="field-block">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                        <label class="field-label" for="notes-input" style="margin-bottom: 0;">Yêu Cầu Riêng / Ràng Buộc Kỹ Thuật</label>
-                        <button type="button" class="btn-attach-trigger" onclick="document.getElementById('attachment-file-input').click()" title="Đính kèm ảnh, PDF hoặc dữ liệu">
-                            <i class="ph ph-paperclip"></i>
-                            <span>Thêm File / Ảnh</span>
-                        </button>
-                    </div>
+                    <label class="field-label" for="notes-input">Yêu Cầu Riêng / Ràng Buộc Kỹ Thuật</label>
                     <textarea class="field-textarea" id="notes-input" 
                               placeholder="Số trang, mô hình, dữ liệu đã có sẵn... (Hỗ trợ kéo thả hoặc bấm Ctrl+V dán ảnh trực tiếp vào đây)"></textarea>
                     
-                    <input type="file" id="attachment-file-input" multiple 
-                           accept="image/*,.pdf,.txt,.csv,.json,.py,.kt,.java,.cpp,.c,.cs,.sql,.html,.css,.js,.md" 
-                           style="display: none;" onchange="handleAttachmentFileSelect(this)">
+                    <!-- Prominent Attachment Upload Zone -->
+                    <div class="attachment-upload-zone" id="attachment-drop-area" onclick="document.getElementById('attachment-file-input').click()" title="Bấm để tải tệp hoặc kéo thả file vào đây">
+                        <input type="file" id="attachment-file-input" multiple 
+                               accept="image/*,.pdf,.txt,.csv,.json,.py,.kt,.java,.cpp,.c,.cs,.sql,.html,.css,.js,.md" 
+                               style="display: none;" onchange="handleAttachmentFileSelect(this)">
+                        
+                        <div class="attachment-upload-content">
+                            <div class="attachment-upload-icon-box">
+                                <i class="ph-bold ph-paperclip"></i>
+                            </div>
+                            <div class="attachment-upload-text">
+                                <span class="attachment-upload-title">Đính kèm File / Ảnh tài liệu</span>
+                                <span class="attachment-upload-sub">Hỗ trợ ảnh sơ đồ, bảng mạch, PDF, CSV, mã nguồn • Kéo thả hoặc Ctrl+V dán ảnh</span>
+                            </div>
+                            <button type="button" class="btn-attach-action">
+                                <i class="ph ph-upload-simple"></i>
+                                <span>Chọn Tệp</span>
+                            </button>
+                        </div>
+                    </div>
 
                     <div id="attachments-tray" class="attachments-tray" style="display: none;"></div>
                 </div>

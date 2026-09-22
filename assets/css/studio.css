@@ -284,6 +284,76 @@
             border-color: var(--accent);
         }
 
+        .attachment-upload-zone {
+            margin-top: 8px;
+            padding: 10px 12px;
+            background: var(--bg-surface);
+            border: 1px dashed var(--border);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+        .attachment-upload-zone:hover, .attachment-upload-zone.dragover {
+            border-color: var(--accent);
+            background: var(--accent-subtle);
+        }
+        .attachment-upload-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .attachment-upload-icon-box {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            background: var(--accent-subtle);
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 17px;
+            flex-shrink: 0;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+        .attachment-upload-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            flex: 1;
+            overflow: hidden;
+        }
+        .attachment-upload-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .attachment-upload-sub {
+            font-size: 10.5px;
+            color: var(--text-tertiary);
+            line-height: 1.3;
+        }
+        .btn-attach-action {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xs);
+            color: var(--text-primary);
+            font-size: 11px;
+            font-weight: 500;
+            padding: 5px 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+        .btn-attach-action:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-subtle);
+        }
+
         .attachments-tray {
             display: flex;
             flex-direction: column;
