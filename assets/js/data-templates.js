@@ -298,6 +298,471 @@ class OutlineGeneratorEngine {
         return generatedData;
     }
 
+    /**
+     * Adaptive Outline Generator
+     * Intelligently selects AI generation if API Key is present,
+     * or uses 360-Corpus Knowledge Retrieval & Synthesis when offline/no Key.
+     */
+    static async generateOutlineAdaptive({
+        topic,
+        discipline,
+        schoolName,
+        reportType,
+        customNotes,
+        attachments = [],
+        apiKey = '',
+        model = '',
+        benchmarkItem = null
+    }) {
+        if (!topic || topic.trim() === '') {
+            topic = 'Nghiên cứu và Triển khai Giải pháp Chuyên môn';
+        }
+        topic = topic.trim();
+        const school = schoolName && schoolName.trim() ? schoolName.trim() : 'Trường Đại Học';
+        const notes = customNotes && customNotes.trim() ? customNotes.trim() : '';
+        const disc = (discipline || 'cntt').toLowerCase();
+        const rType = (reportType || 'do_an').toLowerCase();
+
+        // 1. Check if Gemini API Key is available
+        const effectiveKey = apiKey || (typeof GeminiService !== 'undefined' ? GeminiService.getApiKey() : '');
+        let effectiveModel = model || (typeof GeminiService !== 'undefined' ? GeminiService.getModel() : 'gemini-2.0-flash');
+        if (effectiveModel.includes('2.5')) effectiveModel = 'gemini-2.0-flash';
+
+        // 2. If Gemini API Key exists, generate a 100% bespoke outline via AI
+        if (effectiveKey && effectiveKey.trim() !== '') {
+            try {
+                console.log(`[OutlineEngine] Architecting bespoke outline via Gemini AI (${effectiveModel})...`);
+                const aiOutline = await this.generateOutlineWithAI({
+                    topic,
+                    discipline: disc,
+                    schoolName: school,
+                    reportType: rType,
+                    customNotes: notes,
+                    attachments,
+                    apiKey: effectiveKey.trim(),
+                    model: effectiveModel,
+                    benchmarkItem
+                });
+
+                if (aiOutline && aiOutline.chapters && aiOutline.chapters.length > 0) {
+                    this.saveActiveOutline(aiOutline);
+                    this.saveToHistory(aiOutline);
+                    return aiOutline;
+                }
+            } catch (err) {
+                console.warn('[OutlineEngine] AI Outline Generation error, falling back to 360-Corpus grounding:', err);
+            }
+        }
+
+        // 3. Offline / No API Key: Use 360-Corpus Knowledge Retrieval & Synthesis
+        try {
+            console.log('[OutlineEngine] Synthesizing outline from 360-Corpus Knowledge Base...');
+            const corpusOutline = await this.generateOutlineFromCorpus({
+                topic,
+                discipline: disc,
+                schoolName: school,
+                reportType: rType,
+                customNotes: notes,
+                benchmarkItem
+            });
+
+            if (corpusOutline && corpusOutline.chapters && corpusOutline.chapters.length > 0) {
+                this.saveActiveOutline(corpusOutline);
+                this.saveToHistory(corpusOutline);
+                return corpusOutline;
+            }
+        } catch (err) {
+            console.warn('[OutlineEngine] Corpus Outline Generation error, falling back to baseline heuristic:', err);
+        }
+
+        // 4. Last fallback: Static heuristic generator
+        return this.generateOutline({
+            topic,
+            discipline: disc,
+            schoolName: school,
+            reportType: rType,
+            customNotes: notes
+        });
+    }
+
+    /**
+     * AI-Powered Outline Architect (Bespoke Generation via Gemini REST)
+     */
+    static async generateOutlineWithAI({
+        topic,
+        discipline,
+        schoolName,
+        reportType,
+        customNotes,
+        attachments = [],
+        apiKey,
+        model = 'gemini-2.0-flash',
+        benchmarkItem = null
+    }) {
+        await AcademicCorpusManager.init();
+        let discKey = 'CNTT';
+        if (discipline === 'kinhte' || discipline === 'kt') discKey = 'KT';
+        else if (discipline === 'kythuat' || discipline === 'ktdt') discKey = 'KTDT';
+        else if (discipline === 'xahoi' || discipline === 'khxh') discKey = 'KHXH';
+
+        let benchmark = benchmarkItem;
+        if (!benchmark) {
+            const matches = AcademicCorpusManager.search({ query: topic, discipline: discKey });
+            benchmark = (matches && matches.length > 0) ? matches[0] : (AcademicCorpusManager.getByDiscipline(discKey)[0] || null);
+        }
+
+        let groundingDossier = '';
+        if (benchmark) {
+            groundingDossier = `
+HỒ SƠ ĐỀ TÀI ĐỐI SÁNH CHUẨN MỰC TỪ ĐẠI HỌC TOP ĐẦU VIỆT NAM (GROUNDING BENCHMARK):
+- Đề tài tham chiếu: "${benchmark.title}"
+- Trường: ${benchmark.institution} (${benchmark.year || 2024})
+- Mô hình lý thuyết / thuật toán cốt lõi: ${(benchmark.theoretical_models || []).join(', ')}
+- Phương pháp luận: ${benchmark.methodology || ''}
+- Bộ dữ liệu / Phần cứng thực nghiệm: ${benchmark.dataset_hardware || ''}
+- Chỉ số kiểm định: ${JSON.stringify(benchmark.key_metrics || {})}
+- Khung sườn đối sánh của trường:
+${(benchmark.standard_outline || []).map((s, i) => `  ${i + 1}. ${s}`).join('\n')}
+`;
+        }
+
+        const promptText = `Bạn là một Giáo sư / Trưởng Hội đồng Đánh giá Học thuật cao cấp tại các trường Đại học trọng điểm Việt Nam (Bách Khoa, Kinh Tế Quốc Dân, ĐHQG...).
+Nhiệm vụ của bạn là KIẾN TRÚC HÓA KHUNG SƯỜN HỌC THUẬT TOÀN DIỆN (ĐIỂM A / 9.0+) CHO ĐỀ TÀI:
+>>> "${topic}" <<<
+
+THÔNG TIN ĐỀ TÀI:
+- Khối ngành: ${discipline}
+- Cơ sở đào tạo: ${schoolName}
+- Loại báo cáo: ${reportType}
+${customNotes ? `- Yêu cầu riêng / Ràng buộc kỹ thuật: ${customNotes}` : ''}
+
+${groundingDossier}
+
+QUY CHUẨN BẮT BUỘC (ĐẠT BAREM ĐIỂM XUẤT SẮC 9.0+ / ĐIỂM A):
+1. Bố cục 5 Chương chuẩn hóa theo tỷ trọng vàng:
+   - Chương 1 (20% dung lượng): Cơ sở lý luận & Tổng quan bài toán (chỉ nêu lý thuyết trực tiếp giải quyết vấn đề).
+   - Chương 2 (35% dung lượng): Khảo sát thực trạng, thu thập và bóc tách dữ liệu/thông số thực nghiệm 3-5 năm.
+   - Chương 3 (35% dung lượng): Hiện thực hóa giải pháp chuyên sâu (kiến trúc, thuật toán, mã nguồn, mạch điện, mô hình định giá, hoặc chiến lược hành động).
+   - Chương 4 (10% dung lượng): Thực nghiệm đo kiểm, kiểm định sai số (mô hình PEEL) và đánh giá hiệu năng.
+   - Chương 5 / Kết luận: Tổng kết mức độ hoàn thành và đề xuất hướng phát triển tiếp theo.
+2. MỖI CHƯƠNG phải chia thành 2 - 4 mục con (sections: 1.1, 1.2, 2.1...).
+   - Mỗi mục con phải có 'guidance' (hướng dẫn phương pháp viết chuyên sâu theo mô hình PEEL, không viết chung chung).
+   - Mỗi mục con phải có 'required' (mảng 2-3 yêu cầu bắt buộc: tên bảng số liệu cụ thể Bảng X.Y, sơ đồ kiến trúc, đoạn mã/công thức toán, chỉ số đo lường).
+   - Mỗi mục con phải có 'example' (ví dụ thực tế minh họa cụ thể cho đề tài "${topic}").
+3. ĐẶC BIỆT: Nếu có tệp hoặc ảnh đính kèm (sơ đồ kiến trúc, lưu đồ giải thuật, bảng mạch, ảnh báo cáo tài chính, file code), bạn PHẢI tích hợp các thông số từ tệp đó vào các mục con của Chương 2 và Chương 3!
+
+BẮT BUỘC TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG VIẾT BẤT KỲ CHỮ NÀO NGOÀI JSON) THEO SCHEMA SAU:
+{
+  "disciplineName": "Tên khối ngành tiếng Việt",
+  "reportTypeName": "Tên thể loại báo cáo tiếng Việt",
+  "standards": "Nghị định 30/2020/NĐ-CP (Times New Roman 13pt, lề 3-2-2-2 cm, giãn dòng 1.15)",
+  "citation": "Chuẩn trích dẫn (IEEE cho Kỹ thuật/CNTT hoặc APA 7th cho Kinh tế/Xã hội)",
+  "targetPages": "Ví dụ: 35 – 50 trang (~12.000 – 18.000 từ)",
+  "densityTarget": "Ví dụ: Tối thiểu 12 bảng số liệu thực tế, 14 sơ đồ kiến trúc",
+  "citationTarget": "Ví dụ: 15 – 20 tài liệu tham khảo học thuật",
+  "chapters": [
+    {
+      "title": "Chương 1: ...",
+      "purpose": "Mục đích chương (Chiếm ...% dung lượng)",
+      "sections": [
+        {
+          "num": "1.1",
+          "title": "Tiêu đề mục con",
+          "guidance": "Hướng dẫn chi tiết triển khai",
+          "required": ["Bắt buộc 1", "Bắt buộc 2"],
+          "example": "Ví dụ cụ thể"
+        }
+      ]
+    }
+  ]
+}`;
+
+        const parts = [{ text: promptText }];
+
+        if (attachments && attachments.length > 0) {
+            for (const att of attachments) {
+                if (att.isImage && att.base64) {
+                    const cleanBase64 = att.base64.includes(',') ? att.base64.split(',')[1] : att.base64;
+                    parts.push({
+                        inlineData: {
+                            mimeType: att.mimeType || 'image/png',
+                            data: cleanBase64
+                        }
+                    });
+                } else if (att.text) {
+                    parts.push({
+                        text: `\n--- DỮ LIỆU TỆP ĐÍNH KÈM: ${att.name} ---\n${att.text.slice(0, 10000)}\n--- HẾT TỆP ---`
+                    });
+                }
+            }
+        }
+
+        const safeModel = (model && !model.includes('2.5')) ? model : 'gemini-2.0-flash';
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${safeModel}:generateContent?key=${apiKey}`;
+        const requestBody = {
+            contents: [{ parts }],
+            generationConfig: {
+                temperature: 0.25,
+                maxOutputTokens: 8192,
+                responseMimeType: "application/json"
+            }
+        };
+
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        });
+
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error?.message || `Lỗi HTTP ${res.status}: ${res.statusText}`);
+        }
+
+        const data = await res.json();
+        const candidate = data?.candidates?.[0];
+        if (!candidate || !candidate.content?.parts?.[0]?.text) {
+            throw new Error('Gemini không trả về nội dung khung sườn.');
+        }
+
+        let rawText = candidate.content.parts[0].text.trim();
+        if (rawText.startsWith('```json')) {
+            rawText = rawText.replace(/^```json\s*/i, '').replace(/\s*```$/, '');
+        } else if (rawText.startsWith('```')) {
+            rawText = rawText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+
+        const parsed = JSON.parse(rawText);
+        if (!parsed || !Array.isArray(parsed.chapters) || parsed.chapters.length === 0) {
+            throw new Error('Cấu trúc JSON khung sườn không hợp lệ.');
+        }
+
+        parsed.id = 'ai_outline_' + Date.now();
+        parsed.topic = topic;
+        parsed.discipline = discipline;
+        parsed.reportType = reportType;
+        parsed.schoolName = schoolName;
+        parsed.notes = customNotes;
+        parsed.createdAt = new Date().toLocaleString('vi-VN');
+        parsed.provenance = {
+            type: 'ai',
+            model: safeModel,
+            groundingBenchmark: benchmark ? { id: benchmark.id, title: benchmark.title, institution: benchmark.institution } : null
+        };
+
+        return parsed;
+    }
+
+    /**
+     * Corpus-Grounded Outline Synthesis (When offline or no Gemini API Key)
+     */
+    static async generateOutlineFromCorpus({ topic, discipline, schoolName, reportType, customNotes, benchmarkItem = null }) {
+        await AcademicCorpusManager.init();
+        let discKey = 'CNTT';
+        let discName = 'Công Nghệ Thông Tin & Khoa Học Máy Tính';
+        let citationStyle = 'IEEE Standard [1], [2]';
+        let defaultPages = '30 – 45 trang (~10.000 – 15.000 từ)';
+        let defaultDensity = 'Tối thiểu 10 bảng số liệu, 12 sơ đồ kiến trúc & lưu đồ';
+        let defaultCitations = '12 – 15 tài liệu tham khảo học thuật';
+
+        const disc = (discipline || 'cntt').toLowerCase();
+        if (disc === 'kinhte' || disc === 'kt') {
+            discKey = 'KT';
+            discName = 'Kinh Tế & Quản Trị Kinh Doanh';
+            citationStyle = 'APA 7th Edition (Author, Year)';
+            defaultPages = '35 – 50 trang (~12.000 – 18.000 từ)';
+            defaultDensity = 'Tối thiểu 12 bảng biểu BCTC, 10 biểu đồ tăng trưởng';
+            defaultCitations = '15 – 20 tài liệu tham khảo học thuật (Scopus, BCTC kiểm toán)';
+        } else if (disc === 'kythuat' || disc === 'ktdt') {
+            discKey = 'KTDT';
+            discName = 'Kỹ Thuật Điện Tử & Tự Động Hóa';
+            citationStyle = 'IEEE Standard [1], [2]';
+            defaultPages = '35 – 50 trang (~12.000 – 18.000 từ)';
+            defaultDensity = 'Tối thiểu 14 sơ đồ nguyên lý mạch, bảng BOM và lưu đồ nhúng';
+            defaultCitations = '12 – 18 tài liệu tham khảo (Datasheet, IEEE)';
+        } else if (disc === 'xahoi' || disc === 'khxh') {
+            discKey = 'KHXH';
+            discName = 'Khoa Học Xã Hội & Pháp Lý';
+            citationStyle = 'APA 7th Edition (Author, Year)';
+            defaultPages = '30 – 45 trang (~10.000 – 15.000 từ)';
+            defaultDensity = 'Tối thiểu 10 bảng số liệu điều tra xã hội học, 8 sơ đồ';
+            defaultCitations = '15 – 25 tài liệu tham khảo (Tạp chí KH, Sách chuyên khảo)';
+        }
+
+        let benchmark = benchmarkItem;
+        if (!benchmark) {
+            const matches = AcademicCorpusManager.search({ query: topic, discipline: discKey });
+            benchmark = (matches && matches.length > 0) ? matches[0] : (AcademicCorpusManager.getByDiscipline(discKey)[0] || null);
+        }
+
+        if (!benchmark) {
+            return null;
+        }
+
+        const modelsStr = (benchmark.theoretical_models || []).join(', ') || 'Mô hình lý thuyết chuyên môn';
+        const primaryModel = (benchmark.theoretical_models && benchmark.theoretical_models[0]) || 'Mô hình tham chiếu';
+        const methodologyStr = benchmark.methodology || 'Phương pháp thực nghiệm định lượng';
+        const datasetStr = benchmark.dataset_hardware || 'Bộ dữ liệu đo kiểm thực tế';
+        const metricsList = Object.entries(benchmark.key_metrics || {}).map(([k, v]) => `${k} (${v})`).join(', ') || 'Chỉ số độ chính xác và độ trễ';
+
+        const chapters = [
+            {
+                title: `Chương 1: Đặt Vấn Đề, Tính Cấp Thiết & Cơ Sở Lý Luận Cho "${topic}"`,
+                purpose: `Xác lập bối cảnh khoa học, mục tiêu SMART và khảo sát các công trình State-of-the-Art (Chiếm 20% dung lượng). Kế thừa chuẩn đối sánh từ ${benchmark.institution}.`,
+                sections: [
+                    {
+                        num: '1.1',
+                        title: `Tính cấp thiết, bối cảnh thực tiễn và mục tiêu nghiên cứu của đề tài`,
+                        guidance: `Phân tích khoảng trống nghiên cứu và bài toán thực tiễn mà "${topic}" giải quyết. Nêu rõ 3-4 mục tiêu SMART (Specific, Measurable, Actionable, Relevant, Time-bound).`,
+                        required: ['Tính cấp thiết của đề tài', 'Mục tiêu SMART', 'Đối tượng & Phạm vi nghiên cứu'],
+                        example: `Mục tiêu: Xây dựng giải pháp ${topic} đáp ứng chuẩn đầu ra của ${schoolName}.`
+                    },
+                    {
+                        num: '1.2',
+                        title: `Khảo sát các nghiên cứu liên quan trong và ngoài nước (State-of-the-Art)`,
+                        guidance: `Lập bảng so sánh đối chuẩn ít nhất 4-5 công trình đã công bố, chỉ rõ ưu thế và hạn chế của từng phương pháp tiếp cận trước đây.`,
+                        required: ['Bảng 1.1: So sánh đối chuẩn 5 công trình SOTA', 'Xác lập khoảng trống học thuật'],
+                        example: `Đối chuẩn giải pháp của đề tài so với các mô hình tiêu chuẩn tại ${benchmark.institution}.`
+                    },
+                    {
+                        num: '1.3',
+                        title: `Cơ sở lý thuyết nền tảng: ${modelsStr}`,
+                        guidance: `Trình bày các nguyên lý toán học, thuật toán, khung lý thuyết hoặc chuẩn mực quản trị làm nền tảng cho việc giải quyết đề tài.`,
+                        required: ['Công thức toán học / Nguyên lý vận hành', `Mô hình ${primaryModel}`],
+                        example: `Nguyên lý hoạt động và công thức tính toán của ${primaryModel}.`
+                    }
+                ]
+            },
+            {
+                title: `Chương 2: Khảo Sát Hiện Trạng, Phương Pháp Luận & Cơ Sở Dữ Liệu Thực Nghiệm`,
+                purpose: `Phân tích yêu cầu, bóc tách dữ liệu 3-5 năm và thiết lập phương pháp luận nghiên cứu (Chiếm 35% dung lượng).`,
+                sections: [
+                    {
+                        num: '2.1',
+                        title: `Phương pháp luận nghiên cứu: ${methodologyStr}`,
+                        guidance: `Mô tả chi tiết quy trình tiếp cận, các bước thu thập thông tin và kỹ thuật xử lý dữ liệu phục vụ đề tài "${topic}".`,
+                        required: ['Lưu đồ quy trình nghiên cứu', 'Phương pháp thu thập dữ liệu định lượng'],
+                        example: `Quy trình thực nghiệm: ${methodologyStr}.`
+                    },
+                    {
+                        num: '2.2',
+                        title: `Đặc tả bộ dữ liệu và hạ tầng thử nghiệm: ${datasetStr}`,
+                        guidance: `Lập bảng thống kê mẫu dữ liệu thực nghiệm, quy trình làm sạch, gán nhãn hoặc cấu hình phần cứng thử nghiệm.`,
+                        required: ['Bảng 2.1: Thống kê thông số bộ dữ liệu/thiết bị', 'Quy trình tiền xử lý & chuẩn hóa'],
+                        example: `Bộ dữ liệu: ${datasetStr}.`
+                    },
+                    {
+                        num: '2.3',
+                        title: `Phân tích bài toán, các kịch bản sử dụng (Use Cases) và ràng buộc kỹ thuật`,
+                        guidance: `Đặc tả chi tiết các tác nhân tham gia, ma trận rủi ro hoặc biểu đồ trường hợp sử dụng (Use Case Diagram / Flowchart).`,
+                        required: ['Biểu đồ Use Cases / Quy trình nghiệp vụ', 'Bảng ma trận rủi ro & ràng buộc'],
+                        example: `Ma trận phân quyền và ràng buộc thời gian phản hồi cho ${topic}.`
+                    }
+                ]
+            },
+            {
+                title: `Chương 3: Thiết Kế Kiến Trúc & Hiện Thực Hóa Giải Pháp Chuyên Sâu`,
+                purpose: `Trọng tâm giải pháp: Triển khai thiết kế kiến trúc, mã nguồn, mô hình kỹ thuật và logic nghiệp vụ (Chiếm 35% dung lượng).`,
+                sections: [
+                    {
+                        num: '3.1',
+                        title: `Thiết kế kiến trúc hệ thống tổng thể và phân rã các module chức năng`,
+                        guidance: `Vẽ và giải thích sơ đồ kiến trúc phân tầng (Clean Architecture / Layered Architecture / Flow Diagram), luồng dữ liệu giữa các thành phần.`,
+                        required: ['Hình 3.1: Sơ đồ kiến trúc tổng thể', 'Đặc tả giao tiếp Inter-module / API Contract'],
+                        example: `Kiến trúc hệ thống ${topic} tuân thủ nguyên tắc độc lập và mở rộng cao.`
+                    },
+                    {
+                        num: '3.2',
+                        title: `Hiện thực hóa mô hình cốt lõi (${primaryModel}) và tối ưu hóa giải thuật`,
+                        guidance: `Trình bày chi tiết mã nguồn chuẩn mực (Clean Code), sơ đồ khối mạch điện, bảng tính mô hình định giá hoặc công thức giải thuật then chốt.`,
+                        required: ['Mã nguồn cốt lõi / Sơ đồ mạch / Bảng tính', 'Lưu đồ thuật toán chi tiết'],
+                        example: `Hiện thực hóa thuật toán ${primaryModel} trên nền tảng đề tài.`
+                    },
+                    {
+                        num: '3.3',
+                        title: `Cơ chế bảo mật, an toàn dữ liệu và xử lý ngoại lệ đồng bộ`,
+                        guidance: `Mô tả giải pháp mã hóa dữ liệu, xác thực quyền hạn, kiểm soát lỗi và duy trì tính toàn vẹn khi hệ thống vận hành.`,
+                        required: ['Bảng 3.2: Danh mục xử lý ngoại lệ & bảo mật', 'Quy trình kiểm soát an toàn'],
+                        example: `Bảo vệ dữ liệu tuân thủ Nghị định 13/2023/NĐ-CP và cơ chế Retry/Circuit-breaker.`
+                    }
+                ]
+            },
+            {
+                title: `Chương 4: Thực Nghiệm Đo Kiểm, Đánh Giá Hiệu Năng & Kiểm Định Sai Số`,
+                purpose: `Minh chứng kết quả thực nghiệm với các chỉ số đo lường chuẩn mực: ${metricsList} (Chiếm 10% dung lượng).`,
+                sections: [
+                    {
+                        num: '4.1',
+                        title: `Kịch bản kiểm thử thực nghiệm và môi trường đo kiểm chuẩn`,
+                        guidance: `Xây dựng danh mục các ca kiểm thử (Test Cases / Scenarios) từ mức cơ bản đến tải cao hoặc điều kiện biên khắc nghiệt.`,
+                        required: ['Bảng 4.1: Ma trận kịch bản kiểm thử (Test Matrix)', 'Thông số môi trường kiểm thử'],
+                        example: `Thiết lập môi trường đo kiểm theo tiêu chuẩn tại ${benchmark.institution}.`
+                    },
+                    {
+                        num: '4.2',
+                        title: `Phân tích kết quả thực nghiệm theo chỉ số: ${metricsList}`,
+                        guidance: `Lập bảng so sánh kết quả kỳ vọng (Expected) so với thực tế (Actual), chèn biểu đồ đo kiểm và phân tích độ tin cậy.`,
+                        required: ['Bảng 4.2: Bảng chỉ số hiệu năng thực nghiệm', 'Biểu đồ trực quan hóa kết quả'],
+                        example: `Kết quả đo kiểm: ${metricsList}.`
+                    },
+                    {
+                        num: '4.3',
+                        title: `Phân tích sai số và đánh giá theo mô hình PEEL (Point - Explanation - Evidence - Link)`,
+                        guidance: `Áp dụng mô hình PEEL để lý giải nguyên nhân sai số, đánh giá tính khả thi và phạm vi ứng dụng trong thực tiễn.`,
+                        required: ['Đoạn văn phân tích chuẩn PEEL', 'Bảng đánh giá rủi ro & sai số'],
+                        example: `${benchmark.peel_framework?.Point || 'Đánh giá tính tin cậy thực nghiệm'}.`
+                    }
+                ]
+            },
+            {
+                title: `Kết Luận, Giới Hạn Đề Tài & Hướng Phát Triển Tiếp Theo`,
+                purpose: `Tổng kết toàn diện mức độ hoàn thành so với mục tiêu ban đầu và hoạch định hướng mở rộng đề tài.`,
+                sections: [
+                    {
+                        num: '5.1',
+                        title: `Tổng kết các đóng góp học thuật và kết quả đạt được`,
+                        guidance: `Tự đánh giá đối chiếu với mục tiêu đặt ra ở Chương 1, chỉ ra các đóng góp cụ thể về mặt lý luận và ứng dụng thực tiễn.`,
+                        required: ['Bảng 5.1: Đối chiếu mục tiêu cam kết và kết quả đạt được', 'Đóng góp khoa học'],
+                        example: `Đề tài hoàn thành 100% mục tiêu đề ra với độ chính xác và tính ổn định cao.`
+                    },
+                    {
+                        num: '5.2',
+                        title: `Các giới hạn của đề tài và đề xuất hướng nghiên cứu tiếp theo`,
+                        guidance: `Thẳng thắn chỉ ra các giới hạn về thời gian, mẫu dữ liệu, tài nguyên tính toán và đề xuất kế hoạch nâng cấp cụ thể.`,
+                        required: ['Nhận định các mặt hạn chế', 'Lộ trình phát triển giai đoạn tiếp theo'],
+                        example: `Đề xuất mở rộng quy mô dữ liệu và triển khai thử nghiệm thực địa.`
+                    }
+                ]
+            }
+        ];
+
+        return {
+            id: 'corpus_outline_' + Date.now(),
+            topic: topic,
+            discipline: discipline,
+            disciplineName: discName,
+            reportType: reportType,
+            reportTypeName: (reportType === 'thuc_hanh') ? 'Báo Cáo Thực Hành Chuyên Sâu' : (reportType === 'khoa_luan' ? 'Khóa Luận Tốt Nghiệp' : 'Đồ Án Chuyên Ngành'),
+            schoolName: schoolName,
+            standards: 'Nghị định 30/2020/NĐ-CP (Times New Roman 13pt, lề 3-2-2-2 cm, giãn dòng 1.15)',
+            citation: citationStyle,
+            targetPages: defaultPages,
+            densityTarget: defaultDensity,
+            citationTarget: defaultCitations,
+            notes: customNotes,
+            createdAt: new Date().toLocaleString('vi-VN'),
+            chapters: chapters,
+            provenance: {
+                type: 'corpus',
+                id: benchmark.id,
+                title: benchmark.title,
+                institution: benchmark.institution,
+                models: benchmark.theoretical_models,
+                metrics: benchmark.key_metrics
+            }
+        };
+    }
+
     static saveActiveOutline(outline) {
         try {
             localStorage.setItem(this.ACTIVE_OUTLINE_KEY, JSON.stringify(outline));
@@ -422,7 +887,114 @@ const FULL_SAMPLE_REPORTS = [
  * 90 reports per discipline across HUST, NEU, VNU, HCMUT, FTU, UEH, DAV, HLU...
  */
 class AcademicCorpusManager {
-    static _corpus = [];
+    static _corpus = [
+        {
+            id: "CNTT_001",
+            discipline_key: "CNTT",
+            discipline_name: "Công Nghệ Thông Tin",
+            sub_discipline: "Trí tuệ nhân tạo, Thị giác máy tính & NLP",
+            title: "Nghiên cứu mô hình Fine-tuning PhoBERT nhận diện thực thể tên (NER) trong văn bản quy phạm pháp luật Việt Nam",
+            institution: "ĐH Bách Khoa TP.HCM (HCMUT)",
+            year: 2024,
+            citation_format: "IEEE",
+            methodology: "Thực nghiệm máy học có giám sát trên bộ dữ liệu văn bản pháp lý 14.000 câu",
+            theoretical_models: ["PhoBERT-base", "BiLSTM-CRF", "AdamW Optimizer (lr=2e-5)"],
+            dataset_hardware: "14.200 câu trích xuất từ Cổng thông tin Pháp luật Việt Nam gán nhãn BIO",
+            key_metrics: { F1_Score: "89.4%", Precision: "90.1%", Recall: "88.7%", Inference_Latency: "12.8ms/câu" },
+            standard_outline: [
+                "Chương 1: Đặt vấn đề, Tổng quan bài toán và Mục tiêu nghiên cứu",
+                "Chương 2: Cơ sở lý thuyết, Các công nghệ nền tảng và Khảo sát nghiên cứu liên quan (State-of-the-Art)",
+                "Chương 3: Phân tích yêu cầu, Thiết kế kiến trúc hệ thống và Sơ đồ luồng dữ liệu",
+                "Chương 4: Hiện thực hóa giải pháp, Cài đặt thuật toán và Xây dựng môi trường thử nghiệm",
+                "Chương 5: Thực nghiệm đo kiểm, Đánh giá hiệu năng và Phân tích sai số thực tế",
+                "Kết luận & Hướng phát triển tiếp theo của đề tài"
+            ],
+            peel_framework: {
+                Point: "Luận điểm trọng tâm: Đề tài xác lập mức độ tối ưu hóa thông qua ứng dụng PhoBERT-base.",
+                Explanation: "Cơ chế vận hành dựa trên thực nghiệm máy học có giám sát trên bộ dữ liệu văn bản pháp lý.",
+                Evidence: "Số liệu thực nghiệm: F1_Score 89.4%, Precision 90.1%, Inference_Latency 12.8ms/câu.",
+                Link: "Tiểu kết: Kết quả khẳng định tính khả thi và đóng góp giải pháp định lượng có độ tin cậy cao."
+            }
+        },
+        {
+            id: "KT_001",
+            discipline_key: "KT",
+            discipline_name: "Kinh Tế & Quản Trị Kinh Doanh",
+            sub_discipline: "Phân tích tài chính & Định giá doanh nghiệp",
+            title: "Phân tích hiệu quả tài chính và định giá cổ phiếu FPT theo mô hình Dupont 5 nhân tố và DCF WACC giai đoạn 2021-2025",
+            institution: "Đại Học Kinh Tế Quốc Dân (NEU)",
+            year: 2024,
+            citation_format: "APA",
+            methodology: "Phân tích tài chính định lượng kết hợp dự phóng dòng tiền tự do FCFF",
+            theoretical_models: ["Mô hình Dupont 5 nhân tố", "Mô hình WACC thực tế", "Chiết khấu dòng tiền DCF/FCFF"],
+            dataset_hardware: "Báo cáo tài chính hợp nhất kiểm toán PwC của FPT giai đoạn 2021-2024",
+            key_metrics: { ROE_2024: "29.2%", WACC: "9.85%", Intrinsic_Value: "148.900 VNĐ/CP", CAGR_Revenue: "10.0%" },
+            standard_outline: [
+                "Chương 1: Cơ sở lý luận về hiệu quả tài chính và các mô hình định giá doanh nghiệp",
+                "Chương 2: Phân tích thực trạng tài chính và hiệu quả sinh lời của FPT giai đoạn 2021-2024",
+                "Chương 3: Xây dựng mô hình định giá DCF và phân tích độ nhạy 2 chiều giá trị cổ phiếu",
+                "Chương 4: Kết luận, đánh giá rủi ro và khuyến nghị đầu tư dài hạn"
+            ],
+            peel_framework: {
+                Point: "FPT duy trì tỷ suất sinh lời ROE vượt trội 29.2% nhờ tối ưu hóa gánh nặng lãi vay và đòn bẩy tài chính FL=2.06x.",
+                Explanation: "Mô hình Dupont 5 nhân tố bóc tách rõ rệt động lực tăng trưởng đến từ biên EBIT 19.4%.",
+                Evidence: "Dữ liệu định lượng: Giá trị nội tại DCF đạt 148.900 VNĐ/CP với WACC=9.85%.",
+                Link: "Khẳng định tiềm năng sinh lời bền vững và khuyến nghị MUA cho mục tiêu đầu tư trung hạn."
+            }
+        },
+        {
+            id: "KTDT_001",
+            discipline_key: "KTDT",
+            discipline_name: "Kỹ Thuật Điện Tử & Tự Động Hóa",
+            sub_discipline: "Hệ thống nhúng & IoT",
+            title: "Thiết kế và chế tạo trạm quan trắc môi trường thông minh sử dụng vi điều khiển ESP32 và chuẩn truyền thông LoRaWAN",
+            institution: "Đại Học Bách Khoa TP.HCM (HCMUT)",
+            year: 2024,
+            citation_format: "IEEE",
+            methodology: "Thiết kế phần cứng mạch nhúng, tối ưu hóa công suất tiêu thụ và đo kiểm truyền sóng vô tuyến",
+            theoretical_models: ["ESP32-WROOM-32E Dual Core", "LoRa SX1278 (433MHz)", "Moving Average Filter"],
+            dataset_hardware: "Trạm đo thực tế trang bị cảm biến PMS7003 PM2.5, SHT31 và pin 18650 5200mAh",
+            key_metrics: { Range_Distance: "6.8 km", Sleep_Current: "18.5 uA", Battery_Life: "74 giờ liên tục", PER: "1.2%" },
+            standard_outline: [
+                "Chương 1: Tổng quan đề tài, chỉ tiêu kỹ thuật và khảo sát công nghệ truyền thông IoT",
+                "Chương 2: Thiết kế phần cứng hệ thống, tính toán công suất và danh mục linh kiện BOM",
+                "Chương 3: Thiết kế thuật toán nhúng, xử lý tín hiệu lọc nhiễu và giao thức mạng LoRaWAN",
+                "Chương 4: Kết quả đo đạc thực nghiệm, đánh giá độ tin cậy và phân tích sai số"
+            ],
+            peel_framework: {
+                Point: "Trạm quan trắc đạt tầm truyền sóng vô tuyến tin cậy 6.8 km trong điều kiện đô thị thực tế.",
+                Explanation: "Nhờ tối ưu hóa thông số băng thông BW=125kHz và Spreading Factor SF=10 kết hợp bộ thu SX1278.",
+                Evidence: "Kết quả đo thực tế: Tỷ lệ mất gói PER chỉ 1.2% ở 5km và dòng tiêu thụ Deep Sleep 18.5 uA.",
+                Link: "Chứng minh thiết bị vận hành hoàn toàn độc lập với năng lượng mặt trời và pin dự phòng."
+            }
+        },
+        {
+            id: "KHXH_001",
+            discipline_key: "KHXH",
+            discipline_name: "Khoa Học Xã Hội & Pháp Lý",
+            sub_discipline: "Truyền thông số & Tâm lý người tiêu dùng",
+            title: "Các yếu tố tác động đến hành vi mua sắm ngẫu hứng (Impulsive Buying) của thế hệ Gen Z trên nền tảng TikTok Shop",
+            institution: "ĐH Khoa Học Xã Hội & Nhân Văn (VNU-USSH)",
+            year: 2025,
+            citation_format: "APA",
+            methodology: "Khảo sát định lượng bảng hỏi Google Forms kết hợp phân tích Cronbach Alpha và hồi quy đa biến OLS",
+            theoretical_models: ["Mô hình S-O-R (Stimulus - Organism - Response)", "Mô hình Mua ngẫu hứng Rook 1987", "Thang đo Likert 5 điểm"],
+            dataset_hardware: "Cỡ mẫu chính thức N=485 sinh viên độ tuổi 18-24 tại Hà Nội và TP.HCM",
+            key_metrics: { Sample_N: 485, Cronbach_Alpha_Min: "0.812", Adjusted_R2: "0.584", F_Stat: "172.4 (p<0.001)" },
+            standard_outline: [
+                "Chương 1: Cơ sở lý luận về hành vi mua ngẫu hứng và thuyết Kích thích - Cơ thể - Phản ứng (S-O-R)",
+                "Chương 2: Thiết kế nghiên cứu, quy trình chọn mẫu và xây dựng bảng hỏi khảo sát",
+                "Chương 3: Phân tích kết quả định lượng: Độ tin cậy thang đo và kiểm định mô hình hồi quy",
+                "Chương 4: Hàm ý quản trị cho nhãn hàng và khuyến nghị kiểm soát tài chính cho người tiêu dùng trẻ"
+            ],
+            peel_framework: {
+                Point: "Tính xác thực của KOC (KOC Authenticity) là yếu tố kích thích mạnh nhất với Beta=0.328 (p<0.001).",
+                Explanation: "Cơ chế tâm lý Gen Z đòi hỏi trải nghiệm chân thực, minh bạch về ưu/nhược điểm trước khi phát sinh cảm xúc mua sắm.",
+                Evidence: "Mô hình hồi quy đạt R2 hiệu chỉnh = 0.584, F=172.4 chứng minh độ tương thích thực nghiệm rất cao.",
+                Link: "Khẳng định các nhãn hàng cần chuyển dịch từ quảng cáo hoa mỹ sang tiếp thị chân thực để tối ưu chuyển đổi."
+            }
+        }
+    ];
     static _loaded = false;
 
     static async init() {
@@ -430,12 +1002,15 @@ class AcademicCorpusManager {
         try {
             const res = await fetch('data/academic_corpus_database.json');
             if (res.ok) {
-                this._corpus = await res.json();
-                this._loaded = true;
-                console.log(`[CorpusManager] Loaded ${this._corpus.length} academic benchmark reports.`);
+                const data = await res.json();
+                if (Array.isArray(data) && data.length > 0) {
+                    this._corpus = data;
+                    this._loaded = true;
+                    console.log(`[CorpusManager] Loaded ${this._corpus.length} academic benchmark reports.`);
+                }
             }
         } catch (e) {
-            console.warn('[CorpusManager] Could not load academic_corpus_database.json via fetch:', e);
+            console.warn('[CorpusManager] Could not load academic_corpus_database.json via fetch, using fallback seed benchmarks:', e);
         }
         return this._corpus;
     }
@@ -463,20 +1038,56 @@ class AcademicCorpusManager {
             results = results.filter(r => r.sub_discipline === subDiscipline);
         }
 
-        if (query && query.trim() !== '') {
-            const q = query.toLowerCase().trim();
-            results = results.filter(r => {
-                const titleMatch = r.title && r.title.toLowerCase().includes(q);
-                const subMatch = r.sub_discipline && r.sub_discipline.toLowerCase().includes(q);
-                const uniMatch = r.institution && r.institution.toLowerCase().includes(q);
-                const modelMatch = r.theoretical_models && r.theoretical_models.some(m => m.toLowerCase().includes(q));
-                const methodMatch = r.methodology && r.methodology.toLowerCase().includes(q);
-                const idMatch = r.id && r.id.toLowerCase().includes(q);
-                return titleMatch || subMatch || uniMatch || modelMatch || methodMatch || idMatch;
-            });
+        if (!query || query.trim() === '') {
+            return results;
         }
 
-        return results;
+        const q = query.toLowerCase().trim();
+
+        // 1. Exact substring match
+        const exactMatches = results.filter(r => {
+            const titleMatch = r.title && r.title.toLowerCase().includes(q);
+            const subMatch = r.sub_discipline && r.sub_discipline.toLowerCase().includes(q);
+            const uniMatch = r.institution && r.institution.toLowerCase().includes(q);
+            const modelMatch = r.theoretical_models && r.theoretical_models.some(m => m.toLowerCase().includes(q));
+            const methodMatch = r.methodology && r.methodology.toLowerCase().includes(q);
+            const idMatch = r.id && r.id.toLowerCase().includes(q);
+            return titleMatch || subMatch || uniMatch || modelMatch || methodMatch || idMatch;
+        });
+
+        if (exactMatches.length > 0) {
+            return exactMatches;
+        }
+
+        // 2. Intelligent keyword/token relevance scoring
+        const stopWords = new Set(['và', 'hoặc', 'của', 'cho', 'về', 'trong', 'với', 'các', 'những', 'một', 'được', 'nghiên', 'cứu', 'xây', 'dựng', 'phát', 'triển', 'hệ', 'thống', 'ứng', 'dụng', 'đề', 'tài', 'báo', 'cáo', 'đồ', 'án', 'thực', 'hiện', 'tại', 'theo', 'trên']);
+        const tokens = q.split(/[\s,._\-:;+()]+/).filter(t => t.length > 1 && !stopWords.has(t));
+
+        if (tokens.length === 0) {
+            return results;
+        }
+
+        const scored = results.map(r => {
+            let score = 0;
+            const rTitle = (r.title || '').toLowerCase();
+            const rSub = (r.sub_discipline || '').toLowerCase();
+            const rModels = (r.theoretical_models || []).join(' ').toLowerCase();
+            const rMethod = (r.methodology || '').toLowerCase();
+            const rHardware = (r.dataset_hardware || '').toLowerCase();
+
+            tokens.forEach(tok => {
+                if (rTitle.includes(tok)) score += 6;
+                if (rModels.includes(tok)) score += 4;
+                if (rSub.includes(tok)) score += 3;
+                if (rMethod.includes(tok)) score += 2;
+                if (rHardware.includes(tok)) score += 1;
+            });
+
+            return { item: r, score };
+        });
+
+        const matched = scored.filter(s => s.score > 0).sort((a, b) => b.score - a.score).map(s => s.item);
+        return matched.length > 0 ? matched : results;
     }
 
     static getById(id) {

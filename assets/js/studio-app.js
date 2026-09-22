@@ -298,7 +298,7 @@ function renderSampleChips() {
     `).join('');
 }
 
-function applySamplePrompt(idx) {
+async function applySamplePrompt(idx) {
     const s = OutlineGeneratorEngine.SAMPLE_PROMPTS[idx];
     document.getElementById('disc-select').value = s.discipline;
     document.getElementById('type-select').value = s.type;
@@ -306,17 +306,35 @@ function applySamplePrompt(idx) {
     document.getElementById('topic-input').value = s.topic;
     document.getElementById('notes-input').value = s.notes;
 
-    const generated = OutlineGeneratorEngine.generateOutline({
-        topic: s.topic,
-        discipline: s.discipline,
-        schoolName: s.school,
-        reportType: s.type,
-        customNotes: s.notes
-    });
-    renderOutlineCanvas(generated);
+    const btn = document.getElementById('generate-outline-btn');
+    const btnIcon = document.getElementById('generate-outline-btn-icon');
+    const btnText = document.getElementById('generate-outline-btn-text');
+
+    try {
+        if (btn) btn.disabled = true;
+        if (btnIcon) btnIcon.className = 'ph ph-spinner ph-spin';
+        if (btnText) btnText.innerText = 'Đang AI kiến trúc hóa...';
+
+        const generated = await OutlineGeneratorEngine.generateOutlineAdaptive({
+            topic: s.topic,
+            discipline: s.discipline,
+            schoolName: s.school,
+            reportType: s.type,
+            customNotes: s.notes,
+            apiKey: GeminiService.getApiKey(),
+            model: GeminiService.getModel()
+        });
+        renderOutlineCanvas(generated);
+    } catch (err) {
+        console.error('Error applying sample prompt:', err);
+    } finally {
+        if (btn) btn.disabled = false;
+        if (btnIcon) btnIcon.className = 'ph ph-sparkle';
+        if (btnText) btnText.innerText = 'Khởi Tạo Khung Sườn';
+    }
 }
 
-function handleFormSubmit(e) {
+async function handleFormSubmit(e) {
     if (e && e.preventDefault) e.preventDefault();
 
     const topic = document.getElementById('topic-input').value;
@@ -332,15 +350,35 @@ function handleFormSubmit(e) {
         effectiveNotes = (customNotes ? customNotes + ' | ' : '') + `Tệp/ảnh đính kèm: ${attNames}`;
     }
 
-    const generated = OutlineGeneratorEngine.generateOutline({
-        topic,
-        discipline,
-        schoolName,
-        reportType,
-        customNotes: effectiveNotes
-    });
+    const btn = document.getElementById('generate-outline-btn');
+    const btnIcon = document.getElementById('generate-outline-btn-icon');
+    const btnText = document.getElementById('generate-outline-btn-text');
 
-    renderOutlineCanvas(generated);
+    try {
+        if (btn) btn.disabled = true;
+        if (btnIcon) btnIcon.className = 'ph ph-spinner ph-spin';
+        if (btnText) btnText.innerText = 'Đang AI kiến trúc hóa khung sườn...';
+
+        const generated = await OutlineGeneratorEngine.generateOutlineAdaptive({
+            topic,
+            discipline,
+            schoolName,
+            reportType,
+            customNotes: effectiveNotes,
+            attachments,
+            apiKey: GeminiService.getApiKey(),
+            model: GeminiService.getModel()
+        });
+
+        renderOutlineCanvas(generated);
+    } catch (err) {
+        console.error('Error generating outline:', err);
+        alert('Có lỗi phát sinh trong quá trình kiến trúc hóa khung sườn: ' + err.message);
+    } finally {
+        if (btn) btn.disabled = false;
+        if (btnIcon) btnIcon.className = 'ph ph-sparkle';
+        if (btnText) btnText.innerText = 'Khởi Tạo Khung Sườn';
+    }
 }
 
 function renderOutlineCanvas(outline) {
@@ -356,6 +394,48 @@ function renderOutlineCanvas(outline) {
     document.getElementById('doc-time-badge').innerText = outline.createdAt || '2026';
     document.getElementById('doc-topic-display').innerText = outline.topic;
     document.getElementById('doc-standards-display').innerText = `Thể thức: ${outline.standards} | Trích dẫn: ${outline.citation}`;
+
+    // Grounding Provenance Banner
+    const banner = document.getElementById('doc-grounding-banner');
+    if (banner) {
+        if (outline.provenance) {
+            banner.style.display = 'block';
+            if (outline.provenance.type === 'ai') {
+                const benchRef = outline.provenance.groundingBenchmark
+                    ? `<span style="font-size: 11px; opacity: 0.85;"> • Đối chuẩn SOTA: <strong>${escapeHtml(outline.provenance.groundingBenchmark.id)}</strong> (${escapeHtml(outline.provenance.groundingBenchmark.institution)})</span>`
+                    : '';
+                banner.innerHTML = `
+                    <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-sm); padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <i class="ph-fill ph-sparkle" style="color: #10b981; font-size: 17px;"></i>
+                            <span style="font-size: 12.5px; color: var(--text-primary); font-weight: 600;">
+                                Khung sườn kiến trúc độc quyền bởi Gemini (${escapeHtml(outline.provenance.model || 'Flash')})
+                            </span>
+                            <span style="font-size: 11px; color: var(--text-tertiary);">• Học tập &amp; tối ưu hóa theo quy chuẩn Đại học Việt Nam</span>
+                            ${benchRef}
+                        </div>
+                        <span class="meta-pill" style="border-color: rgba(16, 185, 129, 0.4); color: #10b981; font-size: 11px; white-space: nowrap;">100% Bespoke AI</span>
+                    </div>
+                `;
+            } else if (outline.provenance.type === 'corpus') {
+                banner.innerHTML = `
+                    <div style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: var(--radius-sm); padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <i class="ph-fill ph-graduation-cap" style="color: #3b82f6; font-size: 17px;"></i>
+                            <span style="font-size: 12.5px; color: var(--text-primary); font-weight: 600;">
+                                Học tập &amp; kế thừa cấu trúc từ đề tài chuẩn: ${escapeHtml(outline.provenance.id)} - ${escapeHtml(outline.provenance.title)}
+                            </span>
+                            <span style="font-size: 11px; color: var(--text-tertiary);">(${escapeHtml(outline.provenance.institution)})</span>
+                        </div>
+                        <span class="meta-pill" style="border-color: rgba(59, 130, 246, 0.4); color: #3b82f6; font-size: 11px; white-space: nowrap;">360-Corpus Grounded</span>
+                    </div>
+                `;
+            }
+        } else {
+            banner.style.display = 'none';
+            banner.innerHTML = '';
+        }
+    }
 
     // Density Metrics
     const pagesEl = document.getElementById('metric-pages');
@@ -789,7 +869,7 @@ ${item.citation_sample}
     });
 }
 
-function applyCorpusItemToStudio(id) {
+async function applyCorpusItemToStudio(id) {
     const item = AcademicCorpusManager.getById(id);
     if (!item) return;
 
@@ -805,12 +885,15 @@ function applyCorpusItemToStudio(id) {
 
     closeSampleLibraryModal();
 
-    const generated = OutlineGeneratorEngine.generateOutline({
+    const generated = await OutlineGeneratorEngine.generateOutlineAdaptive({
         topic: item.title,
         discipline: discMapped,
         schoolName: item.institution,
         reportType: 'do_an',
-        customNotes: document.getElementById('notes-input').value
+        customNotes: document.getElementById('notes-input').value,
+        benchmarkItem: item,
+        apiKey: GeminiService.getApiKey(),
+        model: GeminiService.getModel()
     });
 
     renderOutlineCanvas(generated);
@@ -917,7 +1000,16 @@ const GeminiService = {
             else if (outline.discipline === 'kythuat') discKey = 'KTDT';
             else if (outline.discipline === 'xahoi') discKey = 'KHXH';
 
-            const matchedCorpus = AcademicCorpusManager.getByDiscipline(discKey)[0];
+            let matchedCorpus = null;
+            if (outline.provenance && outline.provenance.id) {
+                matchedCorpus = AcademicCorpusManager.getById(outline.provenance.id);
+            } else if (outline.provenance && outline.provenance.groundingBenchmark) {
+                matchedCorpus = AcademicCorpusManager.getById(outline.provenance.groundingBenchmark.id);
+            }
+            if (!matchedCorpus) {
+                const searchMatches = AcademicCorpusManager.search({ query: outline.topic, discipline: discKey });
+                matchedCorpus = (searchMatches && searchMatches.length > 0) ? searchMatches[0] : (AcademicCorpusManager.getByDiscipline(discKey)[0] || null);
+            }
             if (matchedCorpus) {
                 groundingDossier = `
 HỒ SƠ MẪU ĐỐI SÁNH ĐÃ ĐƯỢC KIỂM ĐỊNH (Grounding Benchmark):

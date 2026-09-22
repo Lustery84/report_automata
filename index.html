@@ -110,9 +110,9 @@
                     <div id="attachments-tray" class="attachments-tray" style="display: none;"></div>
                 </div>
 
-                <button type="submit" class="btn btn-accent" style="width: 100%; padding: 11px;">
-                    <i class="ph ph-sparkle"></i>
-                    <span>Khởi Tạo Khung Sườn</span>
+                <button type="submit" id="generate-outline-btn" class="btn btn-accent" style="width: 100%; padding: 11px;">
+                    <i class="ph ph-sparkle" id="generate-outline-btn-icon"></i>
+                    <span id="generate-outline-btn-text">Khởi Tạo Khung Sườn</span>
                 </button>
             </form>
 
@@ -147,6 +147,7 @@
 
                     <h1 class="doc-title" id="doc-topic-display">Tên Đề Tài</h1>
                     <div class="doc-standards" id="doc-standards-display">Quy chuẩn: Nghị định 30/2020/NĐ-CP | Trích dẫn: IEEE Standard</div>
+                    <div id="doc-grounding-banner" style="margin: 12px 0 16px; display: none;"></div>
 
                     <!-- Academic Information Density Metrics (From Vietnamese University Standards) -->
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 20px;" id="academic-metrics-grid">
