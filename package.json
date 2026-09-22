@@ -8,7 +8,6 @@
     "dev": "npx serve -l 3000 .",
     "serve:py": "python -m http.server 3000",
     "lint": "node -c assets/js/data-templates.js && node -c assets/js/studio-app.js",
-    "build": "echo \"Ready for deployment - zero build step required\"",
     "test": "npm run lint"
   },
   "keywords": [
