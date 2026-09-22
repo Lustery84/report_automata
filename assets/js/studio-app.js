@@ -1,0 +1,1613 @@
+/* ==========================================================================
+   Academic Outline Studio - Complete Application Controller
+   Integrated with:
+   - 360+ Grounding Academic Corpus (data/academic_corpus_database.json)
+   - Client-Side BYOK Google Gemini REST Streaming Service
+   - Decree 30/2020/NĐ-CP Word (.docx) & PDF Academic Document Exporter
+   - Zero-dependency Lightweight Markdown Renderer
+   ========================================================================== */
+
+let currentOutline = null;
+let activeSampleReportIndex = 0;
+let lastGeneratedReportText = '';
+let isGeneratingReport = false;
+let reportAbortController = null;
+
+/* --------------------------------------------------------------------------
+   1. Application Lifecycle & Theme Initialization
+   -------------------------------------------------------------------------- */
+document.addEventListener('DOMContentLoaded', () => {
+    initApp();
+});
+
+async function initApp() {
+    // 1. Theme setup
+    const savedTheme = localStorage.getItem('studio_theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeIcon(savedTheme);
+
+    // 2. Render sample quick chips
+    renderSampleChips();
+
+    // 3. Preload 360+ academic benchmark corpus
+    try {
+        await AcademicCorpusManager.init();
+    } catch (e) {
+        console.warn('Academic corpus preload warning:', e);
+    }
+
+    // 4. Update Gemini API Key status indicator
+    updateKeyStatusDot();
+
+    // 5. Restore active outline or show empty canvas
+    const active = OutlineGeneratorEngine.getActiveOutline();
+    if (active) {
+        renderOutlineCanvas(active);
+    } else {
+        showEmptyCanvas();
+    }
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('studio_theme', next);
+    updateThemeIcon(next);
+}
+
+function updateThemeIcon(theme) {
+    const icon = document.getElementById('theme-icon');
+    if (icon) {
+        icon.className = theme === 'dark' ? 'ph ph-sun' : 'ph ph-moon';
+    }
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+/* --------------------------------------------------------------------------
+   2. Outline Form & Canvas Controller
+   -------------------------------------------------------------------------- */
+function renderSampleChips() {
+    const container = document.getElementById('samples-container');
+    if (!container) return;
+    const samples = OutlineGeneratorEngine.SAMPLE_PROMPTS;
+    container.innerHTML = samples.map((s, idx) => `
+        <div class="sample-chip" onclick="applySamplePrompt(${idx})">
+            <strong>[${s.discipline.toUpperCase()}]</strong> ${escapeHtml(s.topic)}
+        </div>
+    `).join('');
+}
+
+function applySamplePrompt(idx) {
+    const s = OutlineGeneratorEngine.SAMPLE_PROMPTS[idx];
+    document.getElementById('disc-select').value = s.discipline;
+    document.getElementById('type-select').value = s.type;
+    document.getElementById('school-input').value = s.school;
+    document.getElementById('topic-input').value = s.topic;
+    document.getElementById('notes-input').value = s.notes;
+
+    const generated = OutlineGeneratorEngine.generateOutline({
+        topic: s.topic,
+        discipline: s.discipline,
+        schoolName: s.school,
+        reportType: s.type,
+        customNotes: s.notes
+    });
+    renderOutlineCanvas(generated);
+}
+
+function handleFormSubmit(e) {
+    if (e && e.preventDefault) e.preventDefault();
+
+    const topic = document.getElementById('topic-input').value;
+    const discipline = document.getElementById('disc-select').value;
+    const reportType = document.getElementById('type-select').value;
+    const schoolName = document.getElementById('school-input').value;
+    const customNotes = document.getElementById('notes-input').value;
+
+    const generated = OutlineGeneratorEngine.generateOutline({
+        topic,
+        discipline,
+        schoolName,
+        reportType,
+        customNotes
+    });
+
+    renderOutlineCanvas(generated);
+}
+
+function renderOutlineCanvas(outline) {
+    currentOutline = outline;
+    document.getElementById('canvas-empty').style.display = 'none';
+    const doc = document.getElementById('canvas-document');
+    doc.classList.add('active');
+
+    // Header metadata
+    document.getElementById('doc-disc-badge').innerText = outline.disciplineName;
+    document.getElementById('doc-type-badge').innerText = outline.reportTypeName;
+    document.getElementById('doc-school-badge').innerText = outline.schoolName;
+    document.getElementById('doc-time-badge').innerText = outline.createdAt || '2026';
+    document.getElementById('doc-topic-display').innerText = outline.topic;
+    document.getElementById('doc-standards-display').innerText = `Thể thức: ${outline.standards} | Trích dẫn: ${outline.citation}`;
+
+    // Density Metrics
+    const pagesEl = document.getElementById('metric-pages');
+    if (pagesEl) pagesEl.innerText = outline.targetPages || '30 - 45 trang';
+    const densityEl = document.getElementById('metric-density');
+    if (densityEl) densityEl.innerText = outline.densityTarget || '≥ 10 bảng & sơ đồ';
+    const citationsEl = document.getElementById('metric-citations');
+    if (citationsEl) citationsEl.innerText = outline.citationTarget || '12 - 15 nguồn';
+
+    // Synchronize Form inputs
+    document.getElementById('disc-select').value = outline.discipline;
+    document.getElementById('type-select').value = outline.reportType;
+    document.getElementById('school-input').value = outline.schoolName;
+    document.getElementById('topic-input').value = outline.topic;
+    document.getElementById('notes-input').value = outline.notes || '';
+
+    // Render Chapters
+    const root = document.getElementById('chapters-root');
+    root.innerHTML = (outline.chapters || []).map((ch) => `
+        <section class="chapter-section">
+            <div class="chapter-heading-row">
+                <h2 class="chapter-heading">${escapeHtml(ch.title)}</h2>
+                <span class="chapter-purpose">${escapeHtml(ch.purpose)}</span>
+            </div>
+
+            <div class="sections-stack">
+                ${(ch.sections || []).map(sec => `
+                    <div class="section-node">
+                        <div class="section-node-header">
+                            <span class="section-code">Mục ${escapeHtml(sec.num)}</span>
+                            <h3 class="section-title">${escapeHtml(sec.title)}</h3>
+                        </div>
+                        <p class="section-guidance">${escapeHtml(sec.guidance)}</p>
+                        <div class="section-specs-footer">
+                            <div class="spec-tags-group">
+                                <span>Yêu cầu bắt buộc:</span>
+                                ${(sec.required || ['Phân tích học thuật']).map(r => `<span class="spec-tag">${escapeHtml(r)}</span>`).join('')}
+                            </div>
+                            ${sec.example ? `<span style="font-family: var(--font-mono); color: var(--text-tertiary);">VD: ${escapeHtml(sec.example)}</span>` : ''}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </section>
+    `).join('');
+}
+
+function showEmptyCanvas() {
+    document.getElementById('canvas-empty').style.display = 'flex';
+    document.getElementById('canvas-document').classList.remove('active');
+}
+
+function newOutlineSession() {
+    OutlineGeneratorEngine.clearActiveOutline();
+    document.getElementById('topic-input').value = '';
+    document.getElementById('notes-input').value = '';
+    showEmptyCanvas();
+    document.getElementById('topic-input').focus();
+}
+
+function openPromptModal() {
+    if (!currentOutline) return;
+    const prompt = OutlineGeneratorEngine.generateAIPrompt(currentOutline);
+    document.getElementById('prompt-text').innerText = prompt;
+    document.getElementById('prompt-modal').classList.add('open');
+}
+
+function closePromptModal() {
+    document.getElementById('prompt-modal').classList.remove('open');
+}
+
+function copyAIPrompt() {
+    const prompt = document.getElementById('prompt-text').innerText;
+    navigator.clipboard.writeText(prompt).then(() => {
+        const label = document.getElementById('copy-btn-label');
+        const orig = label.innerText;
+        label.innerText = 'Đã Sao Chép!';
+        setTimeout(() => {
+            label.innerText = orig;
+        }, 2000);
+    });
+}
+
+/* --------------------------------------------------------------------------
+   3. 360+ Academic Corpus Explorer Modal Controller
+   -------------------------------------------------------------------------- */
+let currentCorpusTab = 'all';
+let activeCorpusId = null;
+
+async function openSampleLibraryModal() {
+    await AcademicCorpusManager.init();
+    updateSubDisciplineDropdown();
+    renderCorpusView();
+    document.getElementById('sample-library-modal').classList.add('open');
+}
+
+function closeSampleLibraryModal() {
+    document.getElementById('sample-library-modal').classList.remove('open');
+}
+
+function setCorpusDisciplineTab(tab) {
+    currentCorpusTab = tab;
+    document.querySelectorAll('#corpus-tabs .corpus-tab').forEach(btn => {
+        if (btn.getAttribute('data-disc') === tab) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+    updateSubDisciplineDropdown();
+    renderCorpusView();
+}
+
+function updateSubDisciplineDropdown() {
+    const select = document.getElementById('corpus-subdisc-select');
+    if (!select) return;
+    if (currentCorpusTab === 'fulltext') {
+        select.style.display = 'none';
+        return;
+    }
+    select.style.display = 'block';
+    const subDiscs = AcademicCorpusManager.getSubDisciplines(currentCorpusTab);
+    select.innerHTML = '<option value="all">Tất cả chuyên ngành hẹp</option>' +
+        subDiscs.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+}
+
+function handleCorpusSearch() {
+    renderCorpusView();
+}
+
+function handleCorpusSubDiscChange() {
+    renderCorpusView();
+}
+
+function renderCorpusView() {
+    const listContainer = document.getElementById('corpus-list-container');
+    const detailContainer = document.getElementById('corpus-detail-container');
+    const searchInput = document.getElementById('corpus-search-input');
+    const subDiscSelect = document.getElementById('corpus-subdisc-select');
+    const footerInfo = document.getElementById('corpus-footer-info');
+
+    // Tab 1: 4 Full-Text Benchmark Reports
+    if (currentCorpusTab === 'fulltext') {
+        footerInfo.innerText = '4 Báo cáo toàn văn chuyên sâu tại: data/sample_reports/';
+        listContainer.innerHTML = `
+            <div style="font-size: 11.5px; font-weight: 700; color: var(--text-tertiary); margin-bottom: 6px; font-family: var(--font-mono);">
+                BÁO CÁO TOÀN VĂN BENCHMARK (4 BÀI)
+            </div>
+        ` + FULL_SAMPLE_REPORTS.map((r, idx) => `
+            <div class="corpus-card ${idx === activeSampleReportIndex ? 'active' : ''}" onclick="selectFullTextReport(${idx})">
+                <div class="corpus-card-top">
+                    <span class="corpus-card-id">${escapeHtml(r.discipline)}</span>
+                    <span class="corpus-card-sub">${escapeHtml(r.school)}</span>
+                </div>
+                <div class="corpus-card-title">${escapeHtml(r.title)}</div>
+                <div class="corpus-card-footer">
+                    <span>${escapeHtml(r.highlights)}</span>
+                </div>
+            </div>
+        `).join('');
+
+        renderFullTextDetail(FULL_SAMPLE_REPORTS[activeSampleReportIndex]);
+        return;
+    }
+
+    // Tab 2: 360+ Academic Database
+    const query = searchInput ? searchInput.value : '';
+    const subDiscipline = subDiscSelect ? subDiscSelect.value : 'all';
+
+    const results = AcademicCorpusManager.search({
+        query,
+        discipline: currentCorpusTab,
+        subDiscipline
+    });
+
+    footerInfo.innerText = `Hiển thị ${results.length} / 360 đề tài nghiên cứu đối sánh (Kho dữ liệu: data/academic_corpus_database.json)`;
+
+    if (results.length === 0) {
+        listContainer.innerHTML = `
+            <div style="text-align: center; padding: 40px 20px; color: var(--text-tertiary);">
+                <i class="ph ph-magnifying-glass" style="font-size: 32px; margin-bottom: 8px; display: block;"></i>
+                <p style="font-size: 13px;">Không tìm thấy đề tài phù hợp với từ khóa.</p>
+                <button class="btn btn-secondary" style="margin-top: 12px; font-size: 12px;" onclick="resetCorpusSearch()">Xóa Bộ Lọc</button>
+            </div>
+        `;
+        detailContainer.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-tertiary); font-size: 13px;">
+                Vui lòng thử lại với từ khóa hoặc chuyên ngành khác.
+            </div>
+        `;
+        return;
+    }
+
+    if (!activeCorpusId || !results.some(r => r.id === activeCorpusId)) {
+        activeCorpusId = results[0].id;
+    }
+
+    listContainer.innerHTML = `
+        <div style="font-size: 11px; font-family: var(--font-mono); color: var(--text-tertiary); margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+            <span>KẾT QUẢ: <strong>${results.length}</strong> ĐỀ TÀI</span>
+            <span>90 BÀI / NGÀNH</span>
+        </div>
+    ` + results.map(item => {
+        const isActive = item.id === activeCorpusId;
+        const metricsList = Object.entries(item.key_metrics || {}).slice(0, 2);
+        return `
+            <div class="corpus-card ${isActive ? 'active' : ''}" onclick="selectCorpusItem('${item.id}')">
+                <div class="corpus-card-top">
+                    <span class="corpus-card-id">${item.id}</span>
+                    <span class="corpus-card-sub" title="${escapeHtml(item.sub_discipline)}">${escapeHtml(item.sub_discipline)}</span>
+                </div>
+                <div class="corpus-card-title">${escapeHtml(item.title)}</div>
+                <div class="corpus-metrics-row">
+                    ${metricsList.map(([k, v]) => `<span class="corpus-metric-chip">${escapeHtml(k)}: <strong>${escapeHtml(v)}</strong></span>`).join('')}
+                </div>
+                <div class="corpus-card-footer">
+                    <span>${escapeHtml(item.institution)}</span>
+                    <span>${item.year}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    const selectedItem = results.find(r => r.id === activeCorpusId) || results[0];
+    renderCorpusDetail(selectedItem);
+}
+
+function selectCorpusItem(id) {
+    activeCorpusId = id;
+    renderCorpusView();
+}
+
+function selectFullTextReport(idx) {
+    activeSampleReportIndex = idx;
+    renderCorpusView();
+}
+
+function resetCorpusSearch() {
+    const input = document.getElementById('corpus-search-input');
+    const select = document.getElementById('corpus-subdisc-select');
+    if (input) input.value = '';
+    if (select) select.value = 'all';
+    setCorpusDisciplineTab('all');
+}
+
+function renderCorpusDetail(item) {
+    const container = document.getElementById('corpus-detail-container');
+    if (!item || !container) return;
+
+    const metricsEntries = Object.entries(item.key_metrics || {});
+
+    container.innerHTML = `
+        <div style="border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span class="corpus-card-id" style="font-size: 11px; padding: 3px 8px;">${item.id}</span>
+                    <span class="meta-pill accent">${escapeHtml(item.discipline_name)}</span>
+                    <span class="meta-pill">${escapeHtml(item.institution)}</span>
+                    <span class="meta-pill">${item.year}</span>
+                    <span class="meta-pill" style="font-family: var(--font-mono);">Trích dẫn: ${escapeHtml(item.citation_format)}</span>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-accent" style="font-size: 11.5px; padding: 5px 12px;" onclick="applyCorpusItemToStudio('${item.id}')">
+                        <i class="ph ph-lightning"></i>
+                        <span>Áp Dụng Cho Studio</span>
+                    </button>
+                    <button class="btn btn-secondary" style="font-size: 11.5px; padding: 5px 10px;" onclick="copyCorpusItemDossier('${item.id}')">
+                        <i class="ph ph-copy"></i>
+                        <span id="copy-dossier-label-${item.id}">Copy Hồ Sơ</span>
+                    </button>
+                </div>
+            </div>
+
+            <h2 style="font-size: 16px; font-weight: 700; line-height: 1.4; color: var(--text-primary); margin-bottom: 6px;">
+                ${escapeHtml(item.title)}
+            </h2>
+            <div style="font-size: 12px; color: var(--text-secondary);">
+                Chuyên ngành: <strong>${escapeHtml(item.sub_discipline)}</strong> | Đối sánh: <strong>${escapeHtml(item.institution)}</strong>
+            </div>
+        </div>
+
+        <!-- 1. Methodology & Theoretical Models -->
+        <div class="dossier-box">
+            <div class="dossier-box-title">
+                <i class="ph ph-brain"></i>
+                <span>Phương Pháp Nghiên Cứu & Mô Hình Lý Thuyết Cốt Lõi</span>
+            </div>
+            <p style="font-size: 13px; line-height: 1.55; color: var(--text-primary); margin-bottom: 10px;">
+                ${escapeHtml(item.methodology)}
+            </p>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                ${(item.theoretical_models || []).map(m => `
+                    <span style="font-family: var(--font-mono); font-size: 11px; background: var(--bg-elevated); border: 1px solid var(--border); padding: 3px 8px; border-radius: var(--radius-xs); color: var(--accent);">
+                        ${escapeHtml(m)}
+                    </span>
+                `).join('')}
+            </div>
+        </div>
+
+        <!-- 2. Dataset / Hardware & Quantitative Metrics -->
+        <div class="dossier-box">
+            <div class="dossier-box-title">
+                <i class="ph ph-chart-bar"></i>
+                <span>Chỉ Số Định Lượng Thực Nghiệm & Dữ Liệu Thực Tế</span>
+            </div>
+            <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 10px;">
+                <strong>Tập dữ liệu / Phần cứng:</strong> ${escapeHtml(item.dataset_hardware)}
+            </p>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px;">
+                ${metricsEntries.map(([k, v]) => `
+                    <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-xs); padding: 8px 12px;">
+                        <div style="font-family: var(--font-mono); font-size: 10px; color: var(--text-tertiary); text-transform: uppercase;">${escapeHtml(k)}</div>
+                        <div style="font-size: 13px; font-weight: 700; color: var(--text-primary); margin-top: 2px;">${escapeHtml(v)}</div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+
+        <!-- 3. Standard Chapter Outlines -->
+        <div class="dossier-box">
+            <div class="dossier-box-title">
+                <i class="ph ph-list-numbers"></i>
+                <span>Khung Sườn 5 Chương Chuẩn Mực Học Thuật</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+                ${(item.standard_outline || []).map((ch, idx) => `
+                    <div style="display: flex; align-items: baseline; gap: 8px; font-size: 12.5px;">
+                        <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--accent); min-width: 20px;">${idx + 1}.</span>
+                        <span style="color: var(--text-primary);">${escapeHtml(ch)}</span>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+
+        <!-- 4. PEEL Academic Paragraph Highlight -->
+        <div class="dossier-box" style="border-left: 3px solid var(--accent);">
+            <div class="dossier-box-title" style="color: var(--accent);">
+                <i class="ph ph-certificate"></i>
+                <span>Quy Chuẩn Đoạn Văn Chuyên Sâu (Mô Hình PEEL)</span>
+            </div>
+            <div style="font-size: 12.5px; line-height: 1.6; color: var(--text-secondary); display: flex; flex-direction: column; gap: 6px;">
+                <div><strong style="color: var(--text-primary);">Point (Luận điểm):</strong> ${escapeHtml(item.peel_framework.Point)}</div>
+                <div><strong style="color: var(--text-primary);">Explanation (Cơ chế lý thuyết):</strong> ${escapeHtml(item.peel_framework.Explanation)}</div>
+                <div><strong style="color: var(--text-primary);">Evidence (Dẫn chứng định lượng):</strong> <code style="font-family: var(--font-mono); font-size: 11px; color: var(--accent);">${escapeHtml(item.peel_framework.Evidence)}</code></div>
+                <div><strong style="color: var(--text-primary);">Link (Tiểu kết):</strong> ${escapeHtml(item.peel_framework.Link)}</div>
+            </div>
+        </div>
+
+        <!-- 5. Scientific Citation Sample -->
+        <div class="dossier-box">
+            <div class="dossier-box-title">
+                <i class="ph ph-quotes"></i>
+                <span>Trích Dẫn Khoa Học Chuẩn (${escapeHtml(item.citation_format)})</span>
+            </div>
+            <div class="prompt-raw-box" style="padding: 10px; font-size: 11.5px; max-height: none;">
+${escapeHtml(item.citation_sample)}
+            </div>
+        </div>
+    `;
+}
+
+function renderFullTextDetail(report) {
+    const container = document.getElementById('corpus-detail-container');
+    if (!report || !container) return;
+
+    container.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 12px;">
+            <div>
+                <span class="meta-pill accent">${escapeHtml(report.discipline)}</span>
+                <span class="meta-pill">${escapeHtml(report.school)}</span>
+                <h2 style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-top: 6px;">${escapeHtml(report.title)}</h2>
+            </div>
+            <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 10px;" onclick="copyActiveSampleReport()">
+                <i class="ph ph-copy"></i>
+                <span id="copy-sample-btn-label">Copy Toàn Văn</span>
+            </button>
+        </div>
+        <div class="prompt-raw-box" id="sample-viewer-content" style="max-height: 480px; color: var(--text-primary); font-family: var(--font-sans); font-size: 13px; line-height: 1.6; white-space: pre-wrap; background: var(--bg-surface);">
+${escapeHtml(report.fullText || 'Đang tải...')}
+        </div>
+    `;
+}
+
+function copyActiveSampleReport() {
+    const report = FULL_SAMPLE_REPORTS[activeSampleReportIndex];
+    if (!report) return;
+    navigator.clipboard.writeText(report.fullText).then(() => {
+        const label = document.getElementById('copy-sample-btn-label');
+        if (label) {
+            const orig = label.innerText;
+            label.innerText = 'Đã Copy!';
+            setTimeout(() => { label.innerText = orig; }, 2000);
+        }
+    });
+}
+
+function copyCorpusItemDossier(id) {
+    const item = AcademicCorpusManager.getById(id);
+    if (!item) return;
+
+    const text = `# HỒ SƠ ĐỐI SÁNH HỌC THUẬT: [${item.id}] ${item.title}
+- Chuyên ngành: ${item.sub_discipline}
+- Cơ sở đào tạo: ${item.institution} (${item.year})
+- Chuẩn trích dẫn: ${item.citation_format}
+- Phương pháp nghiên cứu: ${item.methodology}
+- Mô hình lý thuyết / Thuật toán: ${item.theoretical_models.join(', ')}
+- Dữ liệu / Phần cứng thực nghiệm: ${item.dataset_hardware}
+- Chỉ số định lượng: ${JSON.stringify(item.key_metrics, null, 2)}
+
+## KHUNG SƯỜN CHƯƠNG MỤC:
+${item.standard_outline.map((ch, i) => `${i+1}. ${ch}`).join('\n')}
+
+## MÔ HÌNH LUẬN ĐIỂM PEEL:
+- Point: ${item.peel_framework.Point}
+- Explanation: ${item.peel_framework.Explanation}
+- Evidence: ${item.peel_framework.Evidence}
+- Link: ${item.peel_framework.Link}
+
+## TRÍCH DẪN MẪU:
+${item.citation_sample}
+`;
+
+    navigator.clipboard.writeText(text).then(() => {
+        const label = document.getElementById(`copy-dossier-label-${id}`);
+        if (label) {
+            const orig = label.innerText;
+            label.innerText = 'Đã Copy!';
+            setTimeout(() => { label.innerText = orig; }, 2000);
+        }
+    });
+}
+
+function applyCorpusItemToStudio(id) {
+    const item = AcademicCorpusManager.getById(id);
+    if (!item) return;
+
+    let discMapped = 'cntt';
+    if (item.discipline_key === 'KT') discMapped = 'kinhte';
+    else if (item.discipline_key === 'KTDT') discMapped = 'kythuat';
+    else if (item.discipline_key === 'KHXH') discMapped = 'xahoi';
+
+    document.getElementById('disc-select').value = discMapped;
+    document.getElementById('topic-input').value = item.title;
+    document.getElementById('school-input').value = item.institution;
+    document.getElementById('notes-input').value = `Mô hình: ${item.theoretical_models.join(', ')}. Phương pháp: ${item.methodology}. Dữ liệu thực nghiệm: ${item.dataset_hardware}.`;
+
+    closeSampleLibraryModal();
+
+    const generated = OutlineGeneratorEngine.generateOutline({
+        topic: item.title,
+        discipline: discMapped,
+        schoolName: item.institution,
+        reportType: 'do_an',
+        customNotes: document.getElementById('notes-input').value
+    });
+
+    renderOutlineCanvas(generated);
+}
+
+/* --------------------------------------------------------------------------
+   4. BYOK Google Gemini REST Client Service
+   -------------------------------------------------------------------------- */
+const GeminiService = {
+    STORAGE_KEY: 'gemini_api_key',
+    STORAGE_MODEL: 'gemini_model',
+
+    getApiKey() {
+        return localStorage.getItem(this.STORAGE_KEY) || '';
+    },
+
+    saveApiKey(key) {
+        if (!key || !key.trim()) {
+            localStorage.removeItem(this.STORAGE_KEY);
+        } else {
+            localStorage.setItem(this.STORAGE_KEY, key.trim());
+        }
+        updateKeyStatusDot();
+    },
+
+    removeApiKey() {
+        localStorage.removeItem(this.STORAGE_KEY);
+        updateKeyStatusDot();
+    },
+
+    getModel() {
+        return localStorage.getItem(this.STORAGE_MODEL) || 'gemini-2.0-flash';
+    },
+
+    saveModel(model) {
+        localStorage.setItem(this.STORAGE_MODEL, model || 'gemini-2.0-flash');
+    },
+
+    async testConnection(key, model) {
+        const apiKey = (key || this.getApiKey()).trim();
+        const apiModel = model || this.getModel();
+
+        if (!apiKey) {
+            throw new Error('Vui lòng nhập API Key trước khi kiểm tra.');
+        }
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${apiModel}:generateContent?key=${apiKey}`;
+        const body = {
+            contents: [
+                {
+                    parts: [
+                        { text: 'Xin chào, hãy trả lời đúng một chữ: "OK"' }
+                    ]
+                }
+            ],
+            generationConfig: {
+                maxOutputTokens: 10,
+                temperature: 0.1
+            }
+        };
+
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            const msg = errData.error?.message || `Lỗi HTTP ${res.status}: ${res.statusText}`;
+            throw new Error(msg);
+        }
+
+        const data = await res.json();
+        return data?.candidates?.[0]?.content?.parts?.[0]?.text || 'Kết nối thành công!';
+    },
+
+    async generateReportStream({ outline, onChunk, onStatus, onDone, onError, signal }) {
+        const apiKey = this.getApiKey();
+        const model = this.getModel();
+
+        if (!apiKey) {
+            throw new Error('Chưa cấu hình Gemini API Key. Vui lòng bấm vào nút [🔑 Gemini API Key] để nhập key.');
+        }
+
+        // 1. Gather nearest grounding dossier from 360-corpus
+        let groundingDossier = '';
+        try {
+            await AcademicCorpusManager.init();
+            let discKey = 'CNTT';
+            if (outline.discipline === 'kinhte') discKey = 'KT';
+            else if (outline.discipline === 'kythuat') discKey = 'KTDT';
+            else if (outline.discipline === 'xahoi') discKey = 'KHXH';
+
+            const matchedCorpus = AcademicCorpusManager.getByDiscipline(discKey)[0];
+            if (matchedCorpus) {
+                groundingDossier = `
+HỒ SƠ MẪU ĐỐI SÁNH ĐÃ ĐƯỢC KIỂM ĐỊNH (Grounding Benchmark):
+- Đề tài tương đương: "${matchedCorpus.title}" (${matchedCorpus.institution})
+- Mô hình lý thuyết/thuật toán: ${matchedCorpus.theoretical_models.join(', ')}
+- Phương pháp: ${matchedCorpus.methodology}
+- Dữ liệu định lượng tham chiếu: ${matchedCorpus.dataset_hardware}
+- Chỉ số thực nghiệm chuẩn: ${JSON.stringify(matchedCorpus.key_metrics)}
+- Cấu trúc đoạn văn PEEL mẫu:
+  + Point: ${matchedCorpus.peel_framework.Point}
+  + Explanation: ${matchedCorpus.peel_framework.Explanation}
+  + Evidence: ${matchedCorpus.peel_framework.Evidence}
+  + Link: ${matchedCorpus.peel_framework.Link}
+`;
+            }
+        } catch (e) {
+            console.warn('Grounding dossier attachment error:', e);
+        }
+
+        // 2. Build High-Grade Academic System Instruction
+        const systemPrompt = `Bạn là một Giáo sư / Trưởng Hội đồng Đánh giá Học thuật cao cấp tại Việt Nam. 
+Nhiệm vụ của bạn là viết một BÁO CÁO TOÀN VĂN HỌC THUẬT XUẤT SẮC (Barem Điểm A / 9.0+ trở lên) cho đề tài được giao.
+
+CÁC NGUYÊN TẮC BẮT BUỘC TUÂN THỦ:
+1. QUY CHUẨN THỂ THỨC & BỐ CỤC:
+   - Theo Nghị định 30/2020/NĐ-CP (Times New Roman 13pt, lề 3-2-2-2, giãn dòng 1.15).
+   - Tỷ trọng vàng nội dung:
+     * Chương 1 (20%): Tổng quan & Cơ sở lý luận (chỉ phân tích lý thuyết trực tiếp giải quyết bài toán).
+     * Chương 2 (35%): Khảo sát thực trạng, thu thập và bóc tách dữ liệu thực nghiệm 3-5 năm.
+     * Chương 3 (35%): Hiện thực hóa giải pháp, thuật toán, mã nguồn, mô hình kỹ thuật hoặc chiến lược chuyên sâu (TRỌNG TÂM).
+     * Chương 4 & Kết luận (10%): Kiểm thử định lượng, đánh giá sai số, hạn chế và kiến nghị.
+2. MẬT ĐỘ THÔNG TIN & BẢNG BIỂU ĐỊNH LƯỢNG (Data Density):
+   - Tuyệt đối KHÔNG viết hời hợt, không liệt kê gạch đầu dòng cụt lủn.
+   - BẮT BUỘC mỗi chương phải có ít nhất 1-2 BẢNG SỐ LIỆU ĐỊNH LƯỢNG bằng Markdown Table (đầy đủ: Tiêu đề in đậm Bảng X.Y, Đơn vị tính, Dòng nguồn '(Nguồn: Tác giả tổng hợp/thực nghiệm)').
+   - Bắt buộc có công thức toán học hoặc đoạn mã code/sơ đồ luồng dữ liệu minh chứng.
+3. MÔ HÌNH ĐOẠN VĂN CHUYÊN SÂU PEEL (Point - Explanation - Evidence - Link):
+   - Mọi phân tích chuyên sâu phải có: Luận điểm -> Giải thích nguyên lý -> Dẫn chứng số liệu định lượng thực tế -> Tiểu kết tác động.
+4. NGÔI VĂN & VĂN PHONG:
+   - Sử dụng ngôi thứ ba khách quan ("tác giả", "người nghiên cứu", "đề tài"). Không dùng "tôi", "chúng tôi".`;
+
+        // 3. User Prompt Payload
+        const userPrompt = `Hãy viết một BÁO CÁO TOÀN VĂN HỌC THUẬT HOÀN CHỈNH, CHUYÊN SÂU cho đề tài sau:
+
+THÔNG TIN ĐỀ TÀI:
+- Tên đề tài: ${outline.topic}
+- Khối ngành: ${outline.disciplineName}
+- Thể loại: ${outline.reportTypeName}
+- Cơ sở đào tạo: ${outline.schoolName}
+- Chuẩn định dạng: ${outline.standards}
+- Chuẩn trích dẫn: ${outline.citation}
+- Mục tiêu trang: ${outline.targetPages}
+- Yêu cầu mật độ dữ liệu: ${outline.densityTarget}
+${outline.notes ? `- Yêu cầu bổ sung của giảng viên: ${outline.notes}` : ''}
+
+${groundingDossier}
+
+KHUNG SƯỜN CÁC CHƯƠNG MỤC CẦN TRIỂN KHAI CHI TIẾT:
+${(outline.chapters || []).map(ch => `
+# ${ch.title} (Mục tiêu: ${ch.purpose})
+${(ch.sections || []).map(s => `  - Mục ${s.num}: ${s.title}
+    + Hướng dẫn: ${s.guidance}
+    + Yêu cầu bắt buộc: ${(s.required || []).join(', ')}
+    ${s.example ? `+ Gợi ý thực tế: ${s.example}` : ''}`).join('\n')}
+`).join('\n')}
+
+Hãy xuất bản toàn văn báo cáo bằng định dạng Markdown hoàn chỉnh từ phần Mở đầu, Chi tiết 5 Chương (kèm Bảng dữ liệu thực nghiệm, công thức, mã code hoặc số liệu phân tích sâu), Kết luận và Danh mục Tài liệu tham khảo theo đúng chuẩn trích dẫn.`;
+
+        onStatus && onStatus('Đang kết nối API Gemini...');
+
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+
+        const requestBody = {
+            contents: [
+                {
+                    role: 'user',
+                    parts: [{ text: userPrompt }]
+                }
+            ],
+            systemInstruction: {
+                parts: [{ text: systemPrompt }]
+            },
+            generationConfig: {
+                temperature: 0.35,
+                topP: 0.95,
+                maxOutputTokens: 8192
+            }
+        };
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
+                signal
+            });
+
+            if (!response.ok) {
+                const errJson = await response.json().catch(() => ({}));
+                const errText = errJson.error?.message || `Lỗi HTTP ${response.status}: ${response.statusText}`;
+                throw new Error(errText);
+            }
+
+            // Stream reader (Server-Sent Events)
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let accumulated = '';
+            let buffer = '';
+
+            onStatus && onStatus('Đang sinh toàn văn chuyên sâu...');
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // keep partial line in buffer
+
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (trimmed.startsWith('data: ')) {
+                        const jsonStr = trimmed.slice(6).trim();
+                        if (jsonStr === '[DONE]') continue;
+                        try {
+                            const parsed = JSON.parse(jsonStr);
+                            const chunkText = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                            if (chunkText) {
+                                accumulated += chunkText;
+                                onChunk && onChunk(accumulated, chunkText);
+                            }
+                        } catch (e) {
+                            // ignore partial JSON parse errors
+                        }
+                    }
+                }
+            }
+
+            onDone && onDone(accumulated);
+            return accumulated;
+        } catch (streamErr) {
+            // If streaming fails or was aborted, handle gracefully
+            if (signal && signal.aborted) {
+                throw new Error('Quá trình sinh đã bị hủy bởi người dùng.');
+            }
+            // Fallback to standard non-streaming generateContent if SSE fails
+            console.warn('Streaming failed, falling back to standard generateContent...', streamErr);
+            onStatus && onStatus('Đang chuyển sang chế độ dự phòng chuẩn...');
+
+            const standardEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+            const stdRes = await fetch(standardEndpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
+                signal
+            });
+
+            if (!stdRes.ok) {
+                const stdErr = await stdRes.json().catch(() => ({}));
+                throw new Error(stdErr.error?.message || streamErr.message);
+            }
+
+            const stdData = await stdRes.json();
+            const fullText = stdData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            onChunk && onChunk(fullText, fullText);
+            onDone && onDone(fullText);
+            return fullText;
+        }
+    }
+};
+
+/* --------------------------------------------------------------------------
+   5. Key Modal UI & Indicator Controller
+   -------------------------------------------------------------------------- */
+function updateKeyStatusDot() {
+    const dot = document.getElementById('header-key-dot');
+    const label = document.getElementById('header-key-label');
+    const key = GeminiService.getApiKey();
+
+    if (dot) {
+        if (key && key.length > 5) {
+            dot.className = 'key-status-dot active';
+            dot.title = 'Gemini API Key: Đã kết nối';
+            if (label) label.innerText = 'Gemini Sẵn Sàng';
+        } else {
+            dot.className = 'key-status-dot inactive';
+            dot.title = 'Gemini API Key: Chưa cấu hình (Bấm để thêm key)';
+            if (label) label.innerText = 'Cắm Key Gemini';
+        }
+    }
+}
+
+function openGeminiKeyModal() {
+    const modal = document.getElementById('gemini-key-modal');
+    const input = document.getElementById('gemini-key-input');
+    const select = document.getElementById('gemini-model-select');
+    const resultBox = document.getElementById('key-test-result');
+
+    if (input) input.value = GeminiService.getApiKey();
+    if (select) select.value = GeminiService.getModel();
+    if (resultBox) {
+        resultBox.style.display = 'none';
+        resultBox.innerText = '';
+    }
+
+    if (modal) modal.classList.add('open');
+}
+
+function closeGeminiKeyModal() {
+    const modal = document.getElementById('gemini-key-modal');
+    if (modal) modal.classList.remove('open');
+}
+
+function toggleKeyVisibility() {
+    const input = document.getElementById('gemini-key-input');
+    const icon = document.getElementById('toggle-key-icon');
+    if (!input || !icon) return;
+
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.className = 'ph ph-eye-slash';
+    } else {
+        input.type = 'password';
+        icon.className = 'ph ph-eye';
+    }
+}
+
+async function testGeminiConnection() {
+    const input = document.getElementById('gemini-key-input');
+    const select = document.getElementById('gemini-model-select');
+    const resultBox = document.getElementById('key-test-result');
+    const testLabel = document.getElementById('test-key-label');
+
+    const key = input ? input.value.trim() : '';
+    const model = select ? select.value : 'gemini-2.0-flash';
+
+    if (!key) {
+        resultBox.style.display = 'block';
+        resultBox.style.background = 'rgba(239, 68, 68, 0.1)';
+        resultBox.style.color = '#ef4444';
+        resultBox.style.border = '1px solid #ef4444';
+        resultBox.innerText = 'Vui lòng dán API Key vào ô nhập trước khi kiểm tra.';
+        return;
+    }
+
+    const origText = testLabel.innerText;
+    testLabel.innerText = 'Đang kiểm tra...';
+    resultBox.style.display = 'block';
+    resultBox.style.background = 'var(--bg-elevated)';
+    resultBox.style.color = 'var(--text-secondary)';
+    resultBox.style.border = '1px solid var(--border)';
+    resultBox.innerText = 'Đang gửi gói tin kiểm tra kết nối tới Google AI API...';
+
+    try {
+        await GeminiService.testConnection(key, model);
+        resultBox.style.background = 'rgba(16, 185, 129, 0.1)';
+        resultBox.style.color = '#10b981';
+        resultBox.style.border = '1px solid #10b981';
+        resultBox.innerHTML = `<strong>Thành công!</strong> Khóa API hợp lệ. Model <code>${model}</code> đã sẵn sàng sinh báo cáo chất lượng cao.`;
+    } catch (err) {
+        resultBox.style.background = 'rgba(239, 68, 68, 0.1)';
+        resultBox.style.color = '#ef4444';
+        resultBox.style.border = '1px solid #ef4444';
+        resultBox.innerHTML = `<strong>Kết nối thất bại:</strong> ${escapeHtml(err.message)}`;
+    } finally {
+        testLabel.innerText = origText;
+    }
+}
+
+function saveGeminiKey() {
+    const input = document.getElementById('gemini-key-input');
+    const select = document.getElementById('gemini-model-select');
+
+    const key = input ? input.value.trim() : '';
+    const model = select ? select.value : 'gemini-2.0-flash';
+
+    GeminiService.saveApiKey(key);
+    GeminiService.saveModel(model);
+    closeGeminiKeyModal();
+}
+
+function removeGeminiKey() {
+    if (confirm('Bạn có chắc chắn muốn xóa API Key này khỏi trình duyệt không?')) {
+        GeminiService.removeApiKey();
+        const input = document.getElementById('gemini-key-input');
+        if (input) input.value = '';
+        closeGeminiKeyModal();
+    }
+}
+
+/* --------------------------------------------------------------------------
+   6. Zero-Dependency Lightweight Markdown Renderer
+   -------------------------------------------------------------------------- */
+const MarkdownRenderer = {
+    render(md) {
+        if (!md) return '';
+        const lines = md.split('\n');
+        const html = [];
+        let inCode = false;
+        let codeLang = '';
+        let codeContent = [];
+        let inTable = false;
+        let tableRows = [];
+        let inList = false;
+        let listType = null;
+        let listItems = [];
+
+        function flushList() {
+            if (!inList) return;
+            const tag = listType === 'ol' ? 'ol' : 'ul';
+            html.push(`<${tag}>${listItems.map(i => `<li>${i}</li>`).join('')}</${tag}>`);
+            inList = false;
+            listType = null;
+            listItems = [];
+        }
+
+        function flushTable() {
+            if (!inTable) return;
+            if (tableRows.length > 0) {
+                let tHtml = '<table><thead>';
+                const headerCols = tableRows[0];
+                tHtml += '<tr>' + headerCols.map(c => `<th>${formatInline(c)}</th>`).join('') + '</tr></thead><tbody>';
+                for (let r = 1; r < tableRows.length; r++) {
+                    tHtml += '<tr>' + tableRows[r].map(c => `<td>${formatInline(c)}</td>`).join('') + '</tr>';
+                }
+                tHtml += '</tbody></table>';
+                html.push(tHtml);
+            }
+            inTable = false;
+            tableRows = [];
+        }
+
+        function sanitizeUrl(url) {
+            if (!url) return '#';
+            const clean = url.trim();
+            if (/^(https?:\/\/|mailto:|#)/i.test(clean)) {
+                return clean.replace(/"/g, '&quot;');
+            }
+            return '#';
+        }
+
+        function formatInline(text) {
+            if (!text) return '';
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                .replace(/\[([^\]]+)\]\(((?:[^()]+|\([^()]*\))*)\)/g, (m, label, url) => {
+                    const safe = sanitizeUrl(url);
+                    return `<a href="${safe}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+                });
+        }
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const trimmed = line.trim();
+
+            // Code block
+            if (trimmed.startsWith('```')) {
+                if (!inCode) {
+                    flushList();
+                    flushTable();
+                    inCode = true;
+                    codeLang = trimmed.slice(3).trim();
+                    codeContent = [];
+                } else {
+                    inCode = false;
+                    html.push(`<pre><code class="${escapeHtml(codeLang)}">${codeContent.map(l => escapeHtml(l)).join('\n')}</code></pre>`);
+                    codeContent = [];
+                }
+                continue;
+            }
+            if (inCode) {
+                codeContent.push(line);
+                continue;
+            }
+
+            // Table
+            if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+                flushList();
+                if (/^\|[\s\-:|]+\|$/.test(trimmed)) {
+                    // separator line, skip
+                    continue;
+                }
+                const cells = trimmed.slice(1, -1).split('|').map(c => c.trim());
+                inTable = true;
+                tableRows.push(cells);
+                continue;
+            } else {
+                flushTable();
+            }
+
+            // Empty line
+            if (!trimmed) {
+                flushList();
+                continue;
+            }
+
+            // Headings
+            if (trimmed.startsWith('#### ')) {
+                flushList();
+                html.push(`<h4>${formatInline(trimmed.slice(5))}</h4>`);
+                continue;
+            }
+            if (trimmed.startsWith('### ')) {
+                flushList();
+                html.push(`<h3>${formatInline(trimmed.slice(4))}</h3>`);
+                continue;
+            }
+            if (trimmed.startsWith('## ')) {
+                flushList();
+                html.push(`<h2>${formatInline(trimmed.slice(3))}</h2>`);
+                continue;
+            }
+            if (trimmed.startsWith('# ')) {
+                flushList();
+                html.push(`<h1>${formatInline(trimmed.slice(2))}</h1>`);
+                continue;
+            }
+
+            // Blockquotes
+            if (trimmed.startsWith('> ')) {
+                flushList();
+                html.push(`<blockquote>${formatInline(trimmed.slice(2))}</blockquote>`);
+                continue;
+            }
+
+            // Horizontal Rule
+            if (/^(\-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+                flushList();
+                html.push(`<hr style="border: none; border-top: 1px solid var(--border); margin: 20px 0;">`);
+                continue;
+            }
+
+            // Unordered List
+            if (/^[-*+]\s+/.test(trimmed)) {
+                if (inList && listType !== 'ul') flushList();
+                inList = true;
+                listType = 'ul';
+                listItems.push(formatInline(trimmed.replace(/^[-*+]\s+/, '')));
+                continue;
+            }
+
+            // Ordered List
+            if (/^\d+\.\s+/.test(trimmed)) {
+                if (inList && listType !== 'ol') flushList();
+                inList = true;
+                listType = 'ol';
+                listItems.push(formatInline(trimmed.replace(/^\d+\.\s+/, '')));
+                continue;
+            }
+
+            flushList();
+
+            // Paragraph
+            html.push(`<p>${formatInline(trimmed)}</p>`);
+        }
+
+        flushList();
+        flushTable();
+
+        return html.join('\n');
+    }
+};
+
+/* --------------------------------------------------------------------------
+   7. AI Full Report Generation Studio Controller
+   -------------------------------------------------------------------------- */
+async function startAIFullReportGeneration() {
+    if (!currentOutline) {
+        alert('Vui lòng tạo hoặc chọn một khung sườn đề tài trước khi sinh toàn văn!');
+        return;
+    }
+
+    const apiKey = GeminiService.getApiKey();
+    if (!apiKey) {
+        openGeminiKeyModal();
+        alert('Bạn chưa cấu hình Gemini API Key. Vui lòng nhập khóa API của bạn để bắt đầu sinh toàn văn học thuật.');
+        return;
+    }
+
+    const modal = document.getElementById('ai-full-report-modal');
+    const modelBadge = document.getElementById('report-generation-model-badge');
+    const topicSubtitle = document.getElementById('report-modal-topic-subtitle');
+    const liveStatusText = document.getElementById('report-status-text');
+    const wordCountEl = document.getElementById('report-word-count');
+    const outputEl = document.getElementById('ai-rendered-output');
+
+    if (modelBadge) modelBadge.innerText = GeminiService.getModel();
+    if (topicSubtitle) topicSubtitle.innerText = `${currentOutline.topic} (${currentOutline.schoolName})`;
+    if (outputEl) outputEl.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-tertiary);"><i class="ph ph-circle-notch anim-pulse" style="font-size: 28px; display: block; margin-bottom: 8px;"></i>Đang nạp dữ liệu đối sánh và kết nối Gemini...</div>';
+    if (modal) modal.classList.add('open');
+
+    isGeneratingReport = true;
+    reportAbortController = new AbortController();
+    lastGeneratedReportText = '';
+
+    try {
+        await GeminiService.generateReportStream({
+            outline: currentOutline,
+            signal: reportAbortController.signal,
+            onStatus: (status) => {
+                if (liveStatusText) liveStatusText.innerText = status;
+            },
+            onChunk: (accumulated, chunk) => {
+                lastGeneratedReportText = accumulated;
+                if (outputEl) {
+                    outputEl.innerHTML = MarkdownRenderer.render(accumulated);
+                }
+                if (wordCountEl) {
+                    const words = accumulated.trim().split(/\s+/).filter(Boolean).length;
+                    wordCountEl.innerText = `${words.toLocaleString()} từ`;
+                }
+            },
+            onDone: (fullText) => {
+                isGeneratingReport = false;
+                if (liveStatusText) liveStatusText.innerText = 'Hoàn thành 100%';
+                const words = fullText.trim().split(/\s+/).filter(Boolean).length;
+                if (wordCountEl) wordCountEl.innerText = `${words.toLocaleString()} từ (Đạt chuẩn)`;
+            }
+        });
+    } catch (err) {
+        isGeneratingReport = false;
+        if (liveStatusText) liveStatusText.innerText = 'Lỗi phát sinh';
+        if (outputEl && !lastGeneratedReportText) {
+            outputEl.innerHTML = `
+                <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; color: #ef4444; padding: 20px; border-radius: var(--radius-sm);">
+                    <h3 style="margin-top: 0; font-size: 15px;">Quá trình sinh toàn văn thất bại</h3>
+                    <p style="font-size: 13px; line-height: 1.5;">${escapeHtml(err.message)}</p>
+                    <button class="btn btn-secondary" style="margin-top: 10px; font-size: 12px;" onclick="openGeminiKeyModal()">Kiểm Tra Cài Đặt Key</button>
+                </div>
+            `;
+        }
+    }
+}
+
+function closeAIFullReportModal() {
+    if (isGeneratingReport && reportAbortController) {
+        if (confirm('Báo cáo đang được sinh. Bạn có muốn hủy bỏ quá trình này?')) {
+            reportAbortController.abort();
+            isGeneratingReport = false;
+        } else {
+            return;
+        }
+    }
+    const modal = document.getElementById('ai-full-report-modal');
+    if (modal) modal.classList.remove('open');
+}
+
+function triggerRegenerateReport() {
+    if (confirm('Bạn có chắc chắn muốn sinh lại toàn bộ nội dung báo cáo này không?')) {
+        startAIFullReportGeneration();
+    }
+}
+
+function copyGeneratedReport() {
+    if (!lastGeneratedReportText) {
+        alert('Chưa có nội dung báo cáo để sao chép!');
+        return;
+    }
+    navigator.clipboard.writeText(lastGeneratedReportText).then(() => {
+        const label = document.getElementById('copy-full-report-label');
+        if (label) {
+            const orig = label.innerText;
+            label.innerText = 'Đã Sao Chép!';
+            setTimeout(() => { label.innerText = orig; }, 2000);
+        }
+    });
+}
+
+/* --------------------------------------------------------------------------
+   8. Decree 30/2020/NĐ-CP Document Exporter (Word .docx & PDF)
+   -------------------------------------------------------------------------- */
+const DocumentExportService = {
+    /**
+     * Client-side Microsoft Word (.docx) HTML-based Blob Exporter
+     * Adhering strictly to Decree 30/2020/NĐ-CP:
+     * - Font: Times New Roman, 13pt, line-height 1.15
+     * - Margins: Top 20mm (56.7pt), Bottom 20mm (56.7pt), Left 30mm (85.05pt), Right 20mm (56.7pt)
+     */
+    exportHtmlToWord({ title, bodyHtml, filename }) {
+        const wordDocument = `
+<html xmlns:o='urn:schemas-microsoft-com:office:office' 
+      xmlns:w='urn:schemas-microsoft-com:office:word' 
+      xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+<meta charset='utf-8'>
+<title>${escapeHtml(title)}</title>
+<!--[if gte mso 9]>
+<xml>
+<w:WordDocument>
+<w:View>Print</w:View>
+<w:Zoom>100</w:Zoom>
+<w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+@page Section1 {
+    size: 595.3pt 841.9pt; /* A4 Standard */
+    margin: 56.7pt 56.7pt 56.7pt 85.05pt; /* Decree 30: Top 2cm, Right 2cm, Bottom 2cm, Left 3cm */
+    mso-header-margin: 35.4pt;
+    mso-footer-margin: 35.4pt;
+    mso-paper-source: 0;
+}
+div.Section1 {
+    page: Section1;
+}
+body {
+    font-family: 'Times New Roman', Times, serif;
+    font-size: 13pt;
+    line-height: 1.15;
+    color: #000000;
+}
+p {
+    margin-top: 0;
+    margin-bottom: 6pt;
+    text-align: justify;
+    line-height: 1.15;
+}
+h1, h2, h3, h4 {
+    font-family: 'Times New Roman', Times, serif;
+    color: #000000;
+    page-break-after: avoid;
+}
+h1 {
+    font-size: 14pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    text-align: center;
+    margin-top: 16pt;
+    margin-bottom: 8pt;
+}
+h2 {
+    font-size: 13pt;
+    font-weight: bold;
+    margin-top: 12pt;
+    margin-bottom: 6pt;
+}
+h3 {
+    font-size: 13pt;
+    font-weight: bold;
+    font-style: italic;
+    margin-top: 8pt;
+    margin-bottom: 4pt;
+}
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12pt 0;
+    font-size: 12pt;
+}
+th, td {
+    border: 1px solid #000000;
+    padding: 5pt 7pt;
+    text-align: left;
+    vertical-align: top;
+}
+th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+    text-align: center;
+}
+blockquote {
+    border-left: 3pt solid #000000;
+    margin: 8pt 0 8pt 15pt;
+    padding-left: 10pt;
+    font-style: italic;
+}
+pre, code {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 11pt;
+    background-color: #f7f7f7;
+}
+.cover-page {
+    text-align: center;
+    page-break-after: always;
+    padding-top: 20pt;
+}
+.cover-header {
+    font-size: 12pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    line-height: 1.3;
+}
+.cover-divider {
+    width: 120pt;
+    border-top: 1.5pt solid #000;
+    margin: 10pt auto 100pt auto;
+}
+.cover-title {
+    font-size: 20pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    line-height: 1.3;
+    margin-bottom: 20pt;
+}
+.cover-subtitle {
+    font-size: 14pt;
+    font-style: italic;
+    margin-bottom: 120pt;
+}
+.cover-meta {
+    font-size: 13pt;
+    line-height: 1.5;
+    text-align: left;
+    margin: 0 auto;
+    display: inline-block;
+}
+.cover-footer {
+    margin-top: 80pt;
+    font-size: 13pt;
+    font-weight: bold;
+}
+</style>
+</head>
+<body>
+<div class="Section1">
+${bodyHtml}
+</div>
+</body>
+</html>`;
+
+        const blob = new Blob([wordDocument], { type: 'application/msword;charset=utf-8' });
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = filename || 'Bao_Cao_Hoc_Thuat.docx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(downloadUrl);
+    }
+};
+
+/**
+ * Export the Active Outline canvas as a Decree 30 compliant Word document
+ */
+function exportActiveOutlineWord() {
+    if (!currentOutline) {
+        alert('Vui lòng tạo hoặc chọn một khung sườn đề tài trước khi xuất Word!');
+        return;
+    }
+
+    const outline = currentOutline;
+    const bodyHtml = `
+<div class="cover-page">
+    <div class="cover-header">
+        BỘ GIÁO DỤC VÀ ĐÀO TẠO<br>
+        ${escapeHtml(outline.schoolName.toUpperCase())}
+    </div>
+    <div class="cover-divider"></div>
+
+    <div class="cover-title">
+        ${escapeHtml(outline.topic)}
+    </div>
+    <div class="cover-subtitle">
+        KHUNG SƯỜN HỌC THUẬT &amp; KẾ HOẠCH NGHIÊN CỨU CHI TIẾT
+    </div>
+
+    <div class="cover-meta">
+        <strong>Khối ngành:</strong> ${escapeHtml(outline.disciplineName)}<br>
+        <strong>Thể loại báo cáo:</strong> ${escapeHtml(outline.reportTypeName)}<br>
+        <strong>Quy chuẩn thể thức:</strong> ${escapeHtml(outline.standards)}<br>
+        <strong>Chuẩn trích dẫn:</strong> ${escapeHtml(outline.citation)}<br>
+        <strong>Mục tiêu dung lượng:</strong> ${escapeHtml(outline.targetPages)}
+    </div>
+
+    <div class="cover-footer">
+        HÀ NỘI - NĂM ${new Date().getFullYear()}
+    </div>
+</div>
+
+<h1>THÔNG SỐ BAREM HỌC THUẬT ĐẠT ĐIỂM XUẤT SẮC (ĐIỂM A / 9.0+)</h1>
+<table>
+    <thead>
+        <tr>
+            <th>Chỉ số định lượng</th>
+            <th>Quy định chuẩn</th>
+            <th>Mục tiêu đề tài</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Dung lượng trang</strong></td>
+            <td>Nghị định 30/2020/NĐ-CP (Times New Roman 13pt)</td>
+            <td>${escapeHtml(outline.targetPages)}</td>
+        </tr>
+        <tr>
+            <td><strong>Mật độ bảng biểu &amp; sơ đồ</strong></td>
+            <td>Trung bình 1.5 - 2 trang / 1 bảng định lượng</td>
+            <td>${escapeHtml(outline.densityTarget)}</td>
+        </tr>
+        <tr>
+            <td><strong>Trích dẫn khoa học</strong></td>
+            <td>Chuẩn ${escapeHtml(outline.citation)}</td>
+            <td>${escapeHtml(outline.citationTarget)}</td>
+        </tr>
+        <tr>
+            <td><strong>Tỷ trọng vàng 4 chương</strong></td>
+            <td>20% - 35% - 35% - 10%</td>
+            <td>Chuẩn khung sườn 5 chương</td>
+        </tr>
+    </tbody>
+</table>
+
+${(outline.chapters || []).map(ch => `
+    <h1>${escapeHtml(ch.title)}</h1>
+    <p><em>Mục đích chương: ${escapeHtml(ch.purpose)}</em></p>
+    
+    ${(ch.sections || []).map(s => `
+        <h2>Mục ${escapeHtml(s.num)}: ${escapeHtml(s.title)}</h2>
+        <p><strong>Hướng dẫn triển khai:</strong> ${escapeHtml(s.guidance)}</p>
+        <p><strong>Yêu cầu bắt buộc:</strong> ${(s.required || []).map(r => escapeHtml(r)).join('; ')}</p>
+        ${s.example ? `<p><strong>Ví dụ / Gợi ý thực tế:</strong> <em>${escapeHtml(s.example)}</em></p>` : ''}
+    `).join('')}
+`).join('')}
+
+<h1>DANH MỤC TÀI LIỆU THAM KHẢO DỰ KIẾN (${escapeHtml(outline.citation)})</h1>
+<p>[1] Bộ Giáo dục và Đào tạo, <em>Quy định về đào tạo và đánh giá học phần khóa luận tốt nghiệp</em>, 2024.</p>
+<p>[2] Chính phủ nước CHXHCN Việt Nam, <em>Nghị định số 30/2020/NĐ-CP về công tác văn thư</em>, 2020.</p>
+<p>[3] Viện Nghiên cứu Phát triển Học thuật, <em>Bộ tiêu chuẩn định lượng trong xây dựng báo cáo khoa học xuất sắc</em>, 2025.</p>
+`;
+
+    const cleanTopic = outline.topic.replace(/[^a-zA-Z0-9\u00C0-\u024F\u1EA0-\u1EF9]/g, '_').slice(0, 40);
+    DocumentExportService.exportHtmlToWord({
+        title: outline.topic,
+        bodyHtml,
+        filename: `[De_Cuong]_${cleanTopic}.docx`
+    });
+}
+
+/**
+ * Export the Generated Full-Text report as a Decree 30 compliant Word document
+ */
+function exportGeneratedWordDoc() {
+    if (!lastGeneratedReportText) {
+        alert('Chưa có nội dung toàn văn để xuất! Vui lòng bấm [AI Sinh Toàn Văn Báo Cáo] trước.');
+        return;
+    }
+
+    const topic = currentOutline ? currentOutline.topic : 'Bao_Cao_Hoc_Thuat';
+    const school = currentOutline ? currentOutline.schoolName : 'TRƯỜNG ĐẠI HỌC';
+    const renderedHtml = MarkdownRenderer.render(lastGeneratedReportText);
+
+    const bodyHtml = `
+<div class="cover-page">
+    <div class="cover-header">
+        BỘ GIÁO DỤC VÀ ĐÀO TẠO<br>
+        ${escapeHtml(school.toUpperCase())}
+    </div>
+    <div class="cover-divider"></div>
+
+    <div class="cover-title">
+        ${escapeHtml(topic)}
+    </div>
+    <div class="cover-subtitle">
+        BÁO CÁO NGHIÊN CỨU HỌC THUẬT TOÀN VĂN
+    </div>
+
+    <div class="cover-meta">
+        <strong>Thể loại:</strong> ${escapeHtml(currentOutline ? currentOutline.reportTypeName : 'Báo cáo')}<br>
+        <strong>Khối ngành:</strong> ${escapeHtml(currentOutline ? currentOutline.disciplineName : 'Đa ngành')}<br>
+        <strong>Quy chuẩn:</strong> Nghị định 30/2020/NĐ-CP &bull; Mô hình PEEL &bull; Barem Điểm A
+    </div>
+
+    <div class="cover-footer">
+        NĂM ${new Date().getFullYear()}
+    </div>
+</div>
+
+${renderedHtml}
+`;
+
+    const cleanTopic = topic.replace(/[^a-zA-Z0-9\u00C0-\u024F\u1EA0-\u1EF9]/g, '_').slice(0, 40);
+    DocumentExportService.exportHtmlToWord({
+        title: topic,
+        bodyHtml,
+        filename: `[Toan_Van]_${cleanTopic}.docx`
+    });
+}
+
+/**
+ * Export / Print current Active Outline as PDF
+ */
+function exportToPdf() {
+    if (!currentOutline) {
+        alert('Vui lòng tạo hoặc chọn một khung sườn đề tài trước khi in PDF!');
+        return;
+    }
+    document.body.classList.remove('is-printing-report');
+    window.print();
+}
+
+/**
+ * Export / Print Generated Full-Text report as PDF
+ */
+function exportGeneratedPdfDoc() {
+    if (!lastGeneratedReportText) {
+        alert('Chưa có nội dung toàn văn để xuất PDF! Vui lòng bấm [AI Sinh Toàn Văn Báo Cáo] trước.');
+        return;
+    }
+    document.body.classList.add('is-printing-report');
+    window.print();
+    setTimeout(() => {
+        document.body.classList.remove('is-printing-report');
+    }, 1000);
+}
+
+/* --------------------------------------------------------------------------
+   9. Keyboard Shortcuts
+   -------------------------------------------------------------------------- */
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closePromptModal();
+        closeSampleLibraryModal();
+        closeGeminiKeyModal();
+        if (!isGeneratingReport) {
+            closeAIFullReportModal();
+        }
+    }
+});

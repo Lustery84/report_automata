@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Academic & Technical Outline Studio</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Phosphor Icons (Anti-slop icon system) -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <link rel="stylesheet" href="assets/css/studio.css">
+</head>
+<body>
+
+    <!-- Application Top Navigation -->
+    <header class="header">
+        <a href="#" class="header-brand">
+            <div class="brand-logo">
+                <i class="ph ph-brackets-angle"></i>
+            </div>
+            <div>
+                <div class="brand-title">Academic Outline Studio</div>
+                <div class="brand-subtitle">On-Demand Report Architecture</div>
+            </div>
+        </a>
+
+        <div class="header-actions">
+            <button class="btn btn-secondary" onclick="openGeminiKeyModal()" style="display: flex; align-items: center; gap: 8px;">
+                <i class="ph ph-key"></i>
+                <span id="header-key-label">Gemini API Key</span>
+                <span class="key-status-dot inactive" id="header-key-dot" title="Trạng thái API Key"></span>
+            </button>
+            <button class="btn btn-secondary" onclick="openSampleLibraryModal()" style="display: flex; align-items: center; gap: 8px;">
+                <i class="ph ph-books"></i>
+                <span>Kho Dữ Liệu Nghiên Cứu</span>
+                <span style="font-family: var(--font-mono); font-size: 11px; background: var(--accent); color: #ffffff; padding: 1px 6px; border-radius: 10px; font-weight: 700;">360</span>
+            </button>
+            <button class="btn btn-secondary" onclick="newOutlineSession()">
+                <i class="ph ph-plus"></i>
+                <span>Tạo Mới</span>
+            </button>
+            <button class="btn-icon" onclick="toggleTheme()" title="Sáng / Tối">
+                <i class="ph ph-moon" id="theme-icon"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Studio Layout -->
+    <div class="studio-layout">
+        
+        <!-- Left: Control Rail -->
+        <aside class="control-rail">
+            <div class="rail-eyebrow">
+                <i class="ph ph-sliders"></i>
+                <span>Specification Input</span>
+            </div>
+
+            <form class="rail-form" onsubmit="handleFormSubmit(event)">
+                <div class="field-block">
+                    <label class="field-label" for="disc-select">Khối Chuyên Ngành</label>
+                    <select class="field-select" id="disc-select" required>
+                        <option value="cntt">Công Nghệ Thông Tin & Phần Mềm</option>
+                        <option value="kinhte">Kinh Tế, Quản Trị & Tài Chính</option>
+                        <option value="kythuat">Kỹ Thuật, Cơ Điện Tử & Tự Động Hóa</option>
+                        <option value="xahoi">Khoa Học Xã Hội, Luật & Ngoại Ngữ</option>
+                    </select>
+                </div>
+
+                <div class="field-block">
+                    <label class="field-label" for="type-select">Thể Loại Báo Cáo</label>
+                    <select class="field-select" id="type-select" required>
+                        <option value="do_an">Đồ Án Môn Học / Niên Luận / Capstone</option>
+                        <option value="thuc_hanh">Báo Cáo Thực Hành / Codelab / Lab Assignment</option>
+                        <option value="thuc_tap">Báo Cáo Thực Tập Tốt Nghiệp Doanh Nghiệp</option>
+                        <option value="khoa_luan">Khóa Luận Tốt Nghiệp / Nghiên Cứu Chuyên Đề</option>
+                    </select>
+                </div>
+
+                <div class="field-block">
+                    <label class="field-label" for="school-input">Cơ Sở Đào Tạo / Trường Đại Học</label>
+                    <input type="text" class="field-input" id="school-input" placeholder="VD: ĐH Bách Khoa, NEU, ĐH FPT...">
+                </div>
+
+                <div class="field-block">
+                    <label class="field-label" for="topic-input">Tên Đề Tài / Chủ Đề Chính</label>
+                    <input type="text" class="field-input topic-focus" id="topic-input" 
+                           placeholder="Nhập tên đề tài cụ thể của bạn..." required>
+                </div>
+
+                <div class="field-block">
+                    <label class="field-label" for="notes-input">Yêu Cầu Riêng / Ràng Buộc Kỹ Thuật</label>
+                    <textarea class="field-textarea" id="notes-input" 
+                              placeholder="Số trang, mô hình bắt buộc, dữ liệu đã có sẵn..."></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-accent" style="width: 100%; padding: 11px;">
+                    <i class="ph ph-sparkle"></i>
+                    <span>Khởi Tạo Khung Sườn</span>
+                </button>
+            </form>
+
+            <!-- Quick Pick Samples -->
+            <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border);">
+                <div class="sample-chips-label">Hoặc thử nhanh với các đề tài mẫu:</div>
+                <div class="sample-chips" id="samples-container">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Right: Outline Workspace Canvas -->
+        <main class="canvas-area">
+            
+            <!-- Empty Canvas State -->
+            <div class="canvas-empty" id="canvas-empty">
+                <i class="ph ph-tree-structure"></i>
+                <h3>Chưa có khung sườn nào được tạo</h3>
+                <p>Nhập thông số và tên đề tài ở cột bên trái, sau đó bấm <strong>Khởi Tạo Khung Sườn</strong> để hệ thống kiến trúc hóa cấu trúc chương mục chuẩn.</p>
+            </div>
+
+            <!-- Active Document Outline -->
+            <div class="canvas-document" id="canvas-document">
+                <div class="doc-header">
+                    <div class="doc-meta-row">
+                        <span class="meta-pill accent" id="doc-disc-badge">CNTT</span>
+                        <span class="meta-pill" id="doc-type-badge">Đồ án</span>
+                        <span class="meta-pill" id="doc-school-badge">ĐH Bách Khoa</span>
+                        <span class="meta-pill" id="doc-time-badge">2026</span>
+                    </div>
+
+                    <h1 class="doc-title" id="doc-topic-display">Tên Đề Tài</h1>
+                    <div class="doc-standards" id="doc-standards-display">Quy chuẩn: Nghị định 30/2020/NĐ-CP | Trích dẫn: IEEE Standard</div>
+
+                    <!-- Academic Information Density Metrics (From Vietnamese University Standards) -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 20px;" id="academic-metrics-grid">
+                        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px;">
+                            <div style="font-size: 11px; font-family: var(--font-mono); color: var(--text-tertiary); text-transform: uppercase;">Dung lượng chuẩn</div>
+                            <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);" id="metric-pages">30 - 45 trang</div>
+                        </div>
+                        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px;">
+                            <div style="font-size: 11px; font-family: var(--font-mono); color: var(--text-tertiary); text-transform: uppercase;">Mật độ dữ liệu</div>
+                            <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);" id="metric-density">≥ 10 bảng & sơ đồ</div>
+                        </div>
+                        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px;">
+                            <div style="font-size: 11px; font-family: var(--font-mono); color: var(--text-tertiary); text-transform: uppercase;">Trích dẫn học thuật</div>
+                            <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);" id="metric-citations">12 - 15 nguồn</div>
+                        </div>
+                        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px;">
+                            <div style="font-size: 11px; font-family: var(--font-mono); color: var(--text-tertiary); text-transform: uppercase;">Tỷ trọng vàng</div>
+                            <div style="font-size: 13px; font-weight: 700; color: var(--accent);">20 - 35 - 35 - 10%</div>
+                        </div>
+                    </div>
+
+                    <div class="doc-actions-bar">
+                        <button class="btn btn-accent" onclick="startAIFullReportGeneration()">
+                            <i class="ph ph-sparkle"></i>
+                            <span>AI Sinh Toàn Văn Báo Cáo</span>
+                        </button>
+                        <button class="btn btn-primary" onclick="exportActiveOutlineWord()">
+                            <i class="ph ph-file-doc"></i>
+                            <span>Xuất File Word (.docx)</span>
+                        </button>
+                        <button class="btn btn-secondary" onclick="exportToPdf()">
+                            <i class="ph ph-file-pdf"></i>
+                            <span>Xuất File PDF</span>
+                        </button>
+                        <button class="btn btn-secondary" onclick="openPromptModal()">
+                            <i class="ph ph-terminal-window"></i>
+                            <span>Lấy Prompt AI</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Generated Chapter Nodes -->
+                <div id="chapters-root"></div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- AI Prompt Modal Sheet -->
+    <div class="modal-overlay" id="prompt-modal" onclick="closePromptModal()">
+        <div class="modal-sheet" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3>Prompt Chuẩn Khung Sườn Dành Cho AI</h3>
+                <button class="btn-icon" onclick="closePromptModal()">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+                    Prompt này đã tích hợp đầy đủ vai trò chuyên gia, sườn bài được tạo cho đề tài của bạn và quy cách học thuật:
+                </p>
+                <div class="prompt-raw-box" id="prompt-text"></div>
+            </div>
+            <div class="modal-footer">
+                <span style="font-size: 12px; color: var(--text-tertiary);">Sử dụng trực tiếp trên Claude, Gemini, Antigravity</span>
+                <button class="btn btn-primary" onclick="copyAIPrompt()">
+                    <i class="ph ph-copy"></i>
+                    <span id="copy-btn-label">Sao Chép Prompt</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 360+ Academic Research Corpus Library Modal Sheet -->
+    <div class="modal-overlay" id="sample-library-modal" onclick="closeSampleLibraryModal()">
+        <div class="modal-sheet" onclick="event.stopPropagation()">
+            <!-- Header -->
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 32px; height: 32px; background: var(--accent-subtle); color: var(--accent); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 18px;">
+                        <i class="ph ph-books"></i>
+                    </div>
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <h3 style="font-size: 15px; font-weight: 700;">Kho Dữ Liệu Nghiên Cứu Học Thuật Huấn Luyện</h3>
+                            <span class="meta-pill accent" style="font-size: 10.5px;" id="corpus-total-badge">360 Đề Tài</span>
+                        </div>
+                        <p style="font-size: 11px; color: var(--text-tertiary);">90 đề tài/ngành đối sánh từ HUST, NEU, VNU, HCMUT, FTU, UEH, DAV, HLU...</p>
+                    </div>
+                </div>
+                <button class="btn-icon" onclick="closeSampleLibraryModal()">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+
+            <!-- Search, Tabs & Subdiscipline Filter Bar -->
+            <div style="padding: 12px 24px; background: var(--bg-elevated); border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <div style="position: relative; flex: 1;">
+                        <i class="ph ph-magnifying-glass" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); font-size: 15px;"></i>
+                        <input type="text" id="corpus-search-input" class="field-input" style="padding-left: 36px; height: 36px; font-size: 12.5px;" placeholder="Tìm kiếm theo tên đề tài, mô hình (PhoBERT, YOLO, Dupont, EKF...), phương pháp, trường ĐH..." oninput="handleCorpusSearch()">
+                    </div>
+                    <select id="corpus-subdisc-select" class="field-select" style="width: 260px; height: 36px; font-size: 12px;" onchange="handleCorpusSubDiscChange()">
+                        <option value="all">Tất cả chuyên ngành hẹp</option>
+                    </select>
+                </div>
+                <!-- Discipline Filter Tabs -->
+                <div style="display: flex; gap: 6px; align-items: center; overflow-x: auto; padding-bottom: 2px;" id="corpus-tabs">
+                    <button class="corpus-tab active" data-disc="all" onclick="setCorpusDisciplineTab('all')">Tất cả (360)</button>
+                    <button class="corpus-tab" data-disc="CNTT" onclick="setCorpusDisciplineTab('CNTT')">CNTT & KHMT (90)</button>
+                    <button class="corpus-tab" data-disc="KT" onclick="setCorpusDisciplineTab('KT')">Kinh Tế & Quản Trị (90)</button>
+                    <button class="corpus-tab" data-disc="KTDT" onclick="setCorpusDisciplineTab('KTDT')">Kỹ Thuật & Tự Động Hóa (90)</button>
+                    <button class="corpus-tab" data-disc="KHXH" onclick="setCorpusDisciplineTab('KHXH')">Khoa Học Xã Hội (90)</button>
+                    <button class="corpus-tab" data-disc="fulltext" onclick="setCorpusDisciplineTab('fulltext')">4 Báo Cáo Toàn Văn Mẫu</button>
+                </div>
+            </div>
+
+            <!-- Body: Split Columns -->
+            <div class="modal-body" style="display: grid; grid-template-columns: 380px 1fr; gap: 18px; padding: 16px 24px; min-height: 480px; overflow: hidden;">
+                <!-- Left: List of items -->
+                <div style="display: flex; flex-direction: column; gap: 8px; border-right: 1px solid var(--border); padding-right: 14px; overflow-y: auto; max-height: calc(90vh - 190px);" id="corpus-list-container">
+                    <!-- Populated by JS -->
+                </div>
+                <!-- Right: Detailed Dossier Viewer -->
+                <div style="display: flex; flex-direction: column; overflow-y: auto; max-height: calc(90vh - 190px); padding-right: 6px;" id="corpus-detail-container">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="modal-footer">
+                <span style="font-size: 12px; color: var(--text-tertiary);" id="corpus-footer-info">Cơ sở dữ liệu: data/academic_corpus_database.json (360 đề tài)</span>
+                <button class="btn btn-secondary" onclick="closeSampleLibraryModal()">Đóng</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gemini API Key Configuration Modal -->
+    <div class="modal-overlay" id="gemini-key-modal" onclick="closeGeminiKeyModal()">
+        <div class="modal-sheet" style="max-width: 520px;" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 30px; height: 30px; background: var(--accent-subtle); color: var(--accent); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 16px;">
+                        <i class="ph ph-key"></i>
+                    </div>
+                    <div>
+                        <h3 style="font-size: 15px; font-weight: 700;">Cài Đặt Gemini API Key</h3>
+                        <p style="font-size: 11px; color: var(--text-tertiary);">BYOK - Bảo mật 100% trên thiết bị của bạn</p>
+                    </div>
+                </div>
+                <button class="btn-icon" onclick="closeGeminiKeyModal()">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px; background: var(--bg-elevated); border: 1px solid var(--border); padding: 12px; border-radius: var(--radius-sm);">
+                    <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                        <i class="ph ph-shield-check" style="color: var(--success);"></i>
+                        Quyền Riêng Tư & An Toàn Tuyệt Đối
+                    </div>
+                    API Key được lưu trực tiếp trong <code>localStorage</code> của trình duyệt. Không bao giờ gửi về máy chủ trung gian. Bạn có thể xóa key bất kỳ lúc nào.
+                </div>
+
+                <div class="field-block">
+                    <label class="field-label" for="gemini-key-input">Google Gemini API Key</label>
+                    <div style="position: relative;">
+                        <input type="password" class="field-input" id="gemini-key-input" placeholder="Dán khóa AIzaSy... vào đây" style="padding-right: 40px; font-family: var(--font-mono); font-size: 12.5px;">
+                        <button type="button" class="btn-icon" onclick="toggleKeyVisibility()" style="position: absolute; right: 4px; top: 50%; transform: translateY(-50%);" title="Hiện / Ẩn Key">
+                            <i class="ph ph-eye" id="toggle-key-icon"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="field-block" style="margin-top: 14px;">
+                    <label class="field-label" for="gemini-model-select">Mô Hình Trí Tuệ Nhân Tạo (AI Model)</label>
+                    <select class="field-select" id="gemini-model-select">
+                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Khuyên dùng - Siêu tốc, Miễn phí cao)</option>
+                        <option value="gemini-1.5-pro">Gemini 1.5 Pro (Chuyên sâu học thuật, Lý luận logic cao, Context 2M)</option>
+                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Thử nghiệm thế hệ mới)</option>
+                    </select>
+                </div>
+
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);">
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="color: var(--accent); text-decoration: none; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
+                        <i class="ph ph-arrow-square-out"></i>
+                        <span>Lấy Key miễn phí tại Google AI Studio</span>
+                    </a>
+                    <button type="button" class="btn btn-secondary" style="font-size: 11.5px; padding: 5px 12px;" onclick="testGeminiConnection()">
+                        <i class="ph ph-plugs"></i>
+                        <span id="test-key-label">Kiểm Tra Kết Nối</span>
+                    </button>
+                </div>
+
+                <div id="key-test-result" style="margin-top: 12px; display: none; font-size: 12px; padding: 10px; border-radius: var(--radius-xs);"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" style="color: #ef4444;" onclick="removeGeminiKey()">Xóa Key</button>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-secondary" onclick="closeGeminiKeyModal()">Hủy</button>
+                    <button class="btn btn-accent" onclick="saveGeminiKey()">Lưu Cấu Hình</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Full Report Generation Studio Modal -->
+    <div class="modal-overlay" id="ai-full-report-modal" onclick="closeAIFullReportModal()">
+        <div class="modal-sheet" onclick="event.stopPropagation()">
+            <!-- Modal Header -->
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 32px; height: 32px; background: var(--accent-subtle); color: var(--accent); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 18px;">
+                        <i class="ph ph-sparkle"></i>
+                    </div>
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <h3 style="font-size: 15px; font-weight: 700;">Báo Cáo Học Thuật Hoàn Chỉnh (AI Full-Text Studio)</h3>
+                            <span class="report-status-badge" id="report-generation-model-badge">Gemini 2.0 Flash</span>
+                        </div>
+                        <p style="font-size: 11px; color: var(--text-tertiary);" id="report-modal-topic-subtitle">Đang chuẩn bị dữ liệu đề tài...</p>
+                    </div>
+                </div>
+                <button class="btn-icon" onclick="closeAIFullReportModal()">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+
+            <!-- Toolbar Actions & Status -->
+            <div class="report-toolbar">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="report-status-badge" id="report-live-status">
+                        <span class="anim-pulse" style="width: 6px; height: 6px; background: var(--accent); border-radius: 50%;"></span>
+                        <span id="report-status-text">Đang sẵn sàng...</span>
+                    </span>
+                    <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary);" id="report-word-count">0 từ</span>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-accent" onclick="exportGeneratedWordDoc()">
+                        <i class="ph ph-file-doc"></i>
+                        <span>Tải File Word (.docx)</span>
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportGeneratedPdfDoc()">
+                        <i class="ph ph-file-pdf"></i>
+                        <span>Tải File PDF</span>
+                    </button>
+                    <button class="btn btn-secondary" onclick="copyGeneratedReport()">
+                        <i class="ph ph-copy"></i>
+                        <span id="copy-full-report-label">Sao Chép Toàn Văn</span>
+                    </button>
+                    <button class="btn btn-secondary" id="regen-report-btn" onclick="triggerRegenerateReport()">
+                        <i class="ph ph-arrows-clockwise"></i>
+                        <span>Sinh Lại</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Modal Body (Paper Document Canvas) -->
+            <div class="modal-body" style="padding: 24px; overflow-y: auto; background: var(--bg-page);">
+                <div class="report-document-paper" id="ai-paper-content">
+                    <div class="academic-prose" id="ai-rendered-output">
+                        <!-- Streamed Markdown Render -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="modal-footer">
+                <span style="font-size: 12px; color: var(--text-tertiary);">Quy chuẩn: Nghị định 30/2020/NĐ-CP • Mô hình PEEL • Đạt barem điểm A (9.0+)</span>
+                <button class="btn btn-secondary" onclick="closeAIFullReportModal()">Đóng</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Logic -->
+    <script src="assets/js/data-templates.js"></script>
+    <script src="assets/js/studio-app.js"></script>
+</body>
+</html>

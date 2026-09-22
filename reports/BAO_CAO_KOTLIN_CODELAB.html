@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BÁO CÁO THỰC HÀNH LẬP TRÌNH KOTLIN - THẦY VUI</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm 20mm 20mm 30mm;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: "Times New Roman", Times, serif;
+            font-size: 13pt;
+            line-height: 1.25;
+            color: #000000;
+            background: #e2e8f0;
+            padding: 30px 10px;
+        }
+
+        .document-wrapper {
+            max-width: 820px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 20mm 20mm 20mm 30mm;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        @media print {
+            body { background: #ffffff; padding: 0; }
+            .document-wrapper { box-shadow: none; padding: 0; max-width: 100%; }
+            .page-break { page-break-before: always; }
+            .no-print { display: none; }
+        }
+
+        .header-table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
+        .header-table td { text-align: center; vertical-align: top; font-size: 12pt; }
+        .header-table td.left { width: 45%; }
+        .header-table td.right { width: 55%; }
+
+        .cover-title {
+            text-align: center; font-size: 16pt; font-weight: bold;
+            margin: 40px 0 10px 0; line-height: 1.3; text-transform: uppercase;
+        }
+        .cover-subtitle { text-align: center; font-size: 14pt; font-weight: bold; margin-bottom: 8px; }
+        .cover-subject { text-align: center; font-size: 13pt; font-style: italic; margin-bottom: 45px; }
+
+        .info-table { width: 85%; margin: 0 auto 50px auto; border-collapse: collapse; }
+        .info-table td { padding: 6px 4px; font-size: 13pt; }
+        .info-table td.lbl { font-weight: bold; width: 45%; }
+
+        .cover-footer { text-align: center; font-size: 13pt; font-style: italic; margin-top: 60px; }
+
+        .spec-note {
+            font-size: 11pt; font-style: italic; color: #444444;
+            margin: 15px 0 25px 0; padding: 8px 12px;
+            border-left: 3px solid #666666; background: #fafafa;
+        }
+
+        h1.heading-1 { font-size: 15pt; font-weight: bold; text-transform: uppercase; margin: 25px 0 10px 0; color: #000000; }
+        h2.heading-2 { font-size: 14pt; font-weight: bold; margin: 20px 0 8px 0; color: #000000; }
+        h3.heading-3 { font-size: 13pt; font-weight: bold; font-style: italic; margin: 12px 0 6px 0; color: #000000; }
+
+        p.para { text-align: justify; text-indent: 1.0cm; margin-bottom: 6px; font-size: 13pt; }
+        p.para-noindent { text-align: justify; text-indent: 0; margin-bottom: 6px; font-size: 13pt; }
+
+        pre.code-box {
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 10pt; line-height: 1.25; background: #f8f9fa;
+            border: 1px solid #cccccc; border-left: 4px solid #333333;
+            padding: 10px 14px; margin: 8px 0 14px 0; white-space: pre-wrap; color: #1e293b;
+        }
+
+        pre.output-box {
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 9.5pt; line-height: 1.25; background: #f1f5f9;
+            border: 1px solid #94a3b8; border-left: 4px solid #475569;
+            padding: 8px 12px; margin: 8px 0 14px 0; white-space: pre-wrap; color: #0f172a;
+        }
+        .output-title { font-weight: bold; color: #475569; font-size: 9pt; margin-bottom: 4px; }
+
+        .screenshot-img {
+            width: 100%;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            margin: 8px 0 4px 0;
+            display: block;
+        }
+        .figure-caption {
+            text-align: center;
+            font-size: 11pt;
+            font-style: italic;
+            color: #475569;
+            margin-bottom: 18px;
+        }
+
+        .signature-table { width: 100%; margin-top: 40px; border-collapse: collapse; }
+        .signature-table td { width: 50%; text-align: center; vertical-align: top; font-size: 13pt; }
+        .sign-title { font-weight: bold; }
+        .sign-space { height: 70px; }
+
+        .floating-btn {
+            position: fixed; bottom: 25px; right: 25px;
+            background: #1e293b; color: #ffffff; border: none;
+            padding: 12px 22px; font-size: 14px; font-weight: bold;
+            font-family: sans-serif; border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25); cursor: pointer;
+        }
+        .floating-btn:hover { background: #000000; }
+    </style>
+</head>
+<body>
+
+    <button class="floating-btn no-print" onclick="window.print()">In / Xuat PDF Ngay</button>
+
+    <div class="document-wrapper">
+        <table class="header-table">
+            <tr>
+                <td class="left">
+                    BỘ GIÁO DỤC VÀ ĐÀO TẠO<br>
+                    <b>KHOA CÔNG NGHỆ THÔNG TIN</b>
+                </td>
+                <td class="right">
+                    <b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br>
+                    <b><i>Độc lập - Tự do - Hạnh phúc</i></b><br>
+                    ────────────────────
+                </td>
+            </tr>
+        </table>
+
+        <div class="cover-title">BÁO CÁO KẾT QUẢ THỰC HÀNH LẬP TRÌNH KOTLIN</div>
+        <div class="cover-subtitle">CHUYÊN ĐỀ: CODELAB ANDROID BASICS WITH COMPOSE</div>
+        <div class="cover-subject">(Học phần: Phát triển Ứng dụng Di động - Android)</div>
+
+        <table class="info-table">
+            <tr>
+                <td class="lbl">Giảng viên hướng dẫn:</td>
+                <td>Thầy Vui</td>
+            </tr>
+            <tr>
+                <td class="lbl">Sinh viên thực hiện:</td>
+                <td>................................................................</td>
+            </tr>
+            <tr>
+                <td class="lbl">Mã số sinh viên (MSSV):</td>
+                <td>................................................................</td>
+            </tr>
+            <tr>
+                <td class="lbl">Lớp / Khóa đào tạo:</td>
+                <td>................................................................</td>
+            </tr>
+            <tr>
+                <td class="lbl">Thời hạn nộp bài:</td>
+                <td>Hết ngày 22 / 09 / 2026</td>
+            </tr>
+        </table>
+
+        <div class="cover-footer">Hà Nội, tháng 09 năm 2026</div>
+        <div class="page-break"></div>
+
+        <div class="spec-note">
+            Thông số thiết lập trên Word: Font: Times New Roman | Cỡ chữ: 13-14 (Tiêu đề 14-16) | Dãn dòng: 1.15 - 1.5 lines | Căn lề: Trái 3.0cm, Phải 2.0cm, Trên 2.0cm, Dưới 2.0cm.
+        </div>
+
+        <h1 class="heading-1">I. ĐẶT VẤN ĐỀ VÀ MỤC TIÊU BÀI THỰC HÀNH</h1>
+        <h2 class="heading-2">1. Bối cảnh học phần và tầm quan trọng của ngôn ngữ Kotlin</h2>
+        <p class="para">Trong xu thế phát triển ứng dụng di động hiện đại, Google đã chính thức công nhận Kotlin là ngôn ngữ lập trình ưu tiên số một (Kotlin-first) cho nền tảng Android kể từ năm 2019. Với sự ra đời và phổ biến mạnh mẽ của Jetpack Compose - bộ công cụ hiện đại hàng đầu xây dựng giao diện người dùng theo mô hình khai báo (Declarative UI), việc làm chủ nền tảng ngôn ngữ Kotlin không chỉ là yêu cầu bắt buộc mà còn là điều kiện tiên quyết giúp lập trình viên tiếp cận kiến trúc ứng dụng Android chuyên nghiệp.</p>
+        <p class="para">Bộ bài tập thực hành Google Codelabs (bao gồm Codelab 'Intro to Kotlin: Practice Problems' và Codelab 'Kotlin Fundamentals: Practice Problems') được thiết kế theo các tình huống nghiệp vụ thực tế, bám sát các đặc tính cốt lõi của ngôn ngữ như tính an toàn với giá trị rỗng (Null Safety), hàm bậc cao (Higher-Order Functions), biểu thức Lambda và mô hình hướng đối tượng hiện đại.</p>
+
+        <h2 class="heading-2">2. Mục tiêu kỹ năng và kiến thức cần đạt</h2>
+        <p class="para">- <b>Về cú pháp nền tảng:</b> Phân định chính xác biến bất biến (val) và biến khả biến (var); quản trị bộ nhớ an toàn; làm chủ cơ chế nội suy chuỗi (String Templates) và tuân thủ tuyệt đối quy chuẩn viết mã (Kotlin Coding Conventions).</p>
+        <p class="para">- <b>Về cấu trúc điều khiển và thiết kế hàm:</b> Làm chủ câu lệnh điều kiện if/else, biểu thức when theo dải giá trị; vận dụng linh hoạt cơ chế tham số mặc định (Default arguments) và tham số định danh (Named arguments); thực thi triệt để nguyên lý DRY (Don't Repeat Yourself).</p>
+        <p class="para">- <b>Về lập trình hướng đối tượng và kỹ thuật nâng cao:</b> Xây dựng Class với Primary Constructor, Custom Getter; triển khai quan hệ kế thừa và ghi đè phương thức (open/override); ứng dụng thành thạo toán tử Safe Call (?.) và toán tử Elvis (?:) nhằm loại bỏ nguy cơ ngoại lệ NullPointerException.</p>
+
+        <h1 class="heading-1">II. NỘI DUNG VÀ KẾT QUẢ THỰC HÀNH CODELAB 1: INTRO TO KOTLIN</h1>
+        <p class="para-noindent">Codelab 1 tập trung củng cố kiến thức nền tảng về cú pháp, biến, kiểu dữ liệu, hàm và chuẩn viết mã thông qua 10 bài tập tình huống độc lập:</p>
+
+        <h2 class="heading-2">1. In thông báo ra màn hình (Print messages)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Rèn luyện kỹ năng định nghĩa hàm main() và sử dụng hàm xuất dữ liệu tiêu chuẩn println() để hiển thị văn bản theo cấu trúc nhiều dòng độc lập.</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Hàm println() trong Kotlin thực hiện việc xuất một xâu ký tự ra thiết bị đầu ra chuẩn (console) và tự động nối thêm ký tự ngắt dòng (\n). Đề bài yêu cầu in 4 câu quy tắc ngôn ngữ trên 4 dòng riêng biệt. Chương trình thực hiện 4 lời gọi liên tiếp tới hàm println() trong thân hàm main(). Cấu trúc chương trình đảm bảo tính tường minh và chuẩn mực của cú pháp khởi tạo trong Kotlin.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">fun main() {
+    println("Use the val keyword when the value doesn't change.")
+    println("Use the var keyword when the value can change.")
+    println("When you define a function, you define the parameters that can be passed to it.")
+    println("When you call a function, you pass arguments for the parameters.")
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>Use the val keyword when the value doesn't change.
+Use the var keyword when the value can change.
+When you define a function, you define the parameters that can be passed to it.
+When you call a function, you pass arguments for the parameters.</pre>
+        <img class="screenshot-img" src="screenshots/c1_bai1.png" alt="Kết quả Bài 1">
+        <div class="figure-caption">Hình 1: Ảnh chụp màn hình kết quả chạy thực tế Bài 1 trên Kotlin Playground</div>
+        
+        <h2 class="heading-2">2. Khắc phục lỗi biên dịch chuỗi (Fix compile error)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Phát hiện và hiệu chỉnh các lỗi cú pháp cơ bản liên quan đến dấu phân cách xâu ký tự (String literals) và dấu đóng mở danh sách đối số của hàm.</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Đoạn mã gốc gặp lỗi biên dịch: println("New chat message from a friend'} do việc mở chuỗi bằng dấu ngoặc kép (") nhưng lại kết thúc sai bằng dấu nháy đơn (') và đóng nhầm ngoặc nhọn (}). Trong Kotlin, một hằng chuỗi ký tự bắt buộc phải được bao bọc nhất quán bởi cặp ngoặc kép "...". Đồng thời, danh sách đối số truyền cho hàm phải được bao trong cặp ngoặc đơn tròn (...). Sau khi chuẩn hóa dấu đóng ngoặc kép và ngoặc tròn, chương trình biên dịch thành công.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">fun main() { 
+    println("New chat message from a friend")
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>New chat message from a friend</pre>
+        <img class="screenshot-img" src="screenshots/c1_bai2.png" alt="Kết quả Bài 2">
+        <div class="figure-caption">Hình 2: Ảnh chụp màn hình kết quả chạy thực tế Bài 2 trên Kotlin Playground</div>
+        
+        <h2 class="heading-2">3. Khai báo biến và chèn biến vào chuỗi (String templates)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Phân biệt thuộc tính bất biến (val) và khả biến (var); vận dụng kỹ thuật chèn giá trị biến trực tiếp vào xâu ký tự thông qua cơ chế String Templates.</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Mã nguồn gốc phát sinh lỗi biên dịch do biến discountPercentage và offer được khai báo bằng từ khóa 'val' (read-only reference) nhưng lại thực hiện phép gán giá trị lần thứ hai ở các dòng tiếp theo. Trong chuẩn lập trình an toàn của Kotlin, các biến có giá trị xác định nên được khởi tạo trực tiếp ngay tại thời điểm khai báo. Ký tự đô-la ($) đứng trước tên biến ($discountPercentage, $item) cho phép trình biên dịch thực hiện nội suy giá trị của biến vào chuỗi tại thời điểm chạy mà không cần sử dụng các phép toán nối chuỗi rườm rà.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">fun main() {
+    val discountPercentage = 20
+    val item = "Google Chromecast"
+    val offer = "Sale - Up to $discountPercentage% discount on $item! Hurry up!"
+    
+    println(offer)
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>Sale - Up to 20% discount on Google Chromecast! Hurry up!</pre>
+        <img class="screenshot-img" src="screenshots/c1_bai3.png" alt="Kết quả Bài 3">
+        <div class="figure-caption">Hình 3: Ảnh chụp màn hình kết quả chạy thực tế Bài 3 trên Kotlin Playground</div>
+        
+        <h2 class="heading-2">4. Phép toán số học và kiểu dữ liệu số (String concatenation)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Phân biệt sự khác nhau giữa kiểu xâu ký tự (String) và kiểu số nguyên (Int); phân biệt ngữ nghĩa của toán tử '+' trong ngữ cảnh ghép chuỗi và phép cộng đại số.</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Trong đoạn mã ban đầu, các giá trị "20" và "30" được đặt trong cặp ngoặc kép nên được hệ thống phân loại kiểu dữ liệu ngầm định là String. Do đó, toán tử '+' được nạp chồng (overload) theo ngữ nghĩa ghép nối chuỗi ký tự, dẫn đến kết quả sai lệch là "2030". Bằng cách loại bỏ dấu ngoặc kép, hai định danh biến numberOfAdults và numberOfKids trở thành kiểu số nguyên Int. Khi đó toán tử '+' thực thi phép cộng số học trả về tổng giá trị là 50, phản ánh chính xác quy mô số lượng người tham dự.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">fun main() {
+    val numberOfAdults = 20
+    val numberOfKids = 30
+    val total = numberOfAdults + numberOfKids
+    println("The total party size is: $total")
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>The total party size is: 50</pre>
+        <img class="screenshot-img" src="screenshots/c1_bai4.png" alt="Kết quả Bài 4">
+        <div class="figure-caption">Hình 4: Ảnh chụp màn hình kết quả chạy thực tế Bài 4 trên Kotlin Playground</div>
+        
+        <h2 class="heading-2">5. Định dạng thông điệp và biểu thức số học (Message formatting)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Thực thi phép tính số học giữa các biến và tích hợp kết quả tính toán vào định dạng chuỗi thông báo kết quả.</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Đoạn mã gốc thực hiện phép gán: totalSalary = "$baseSalary + $bonusAmount" khiến giá trị của biến totalSalary trở thành chuỗi ký tự thuần túy hiển thị nguyên văn "5000 + 1000" thay vì tổng số tiền thực nhận. Để giải quyết, biến totalSalary cần được gán bằng biểu thức số học baseSalary + bonusAmount nhằm tính toán chính xác tổng thu nhập là 6000 đơn vị tiền tệ, trước khi được nội suy vào chuỗi thông báo chúc mừng.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">fun main() {
+    val baseSalary = 5000
+    val bonusAmount = 1000
+    val totalSalary = baseSalary + bonusAmount
+    println("Congratulations for your bonus! You will receive a total of $totalSalary (additional bonus).")
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>Congratulations for your bonus! You will receive a total of 6000 (additional bonus).</pre>
+        <img class="screenshot-img" src="screenshots/c1_bai5.png" alt="Kết quả Bài 5">
+        <div class="figure-caption">Hình 5: Ảnh chụp màn hình kết quả chạy thực tế Bài 5 trên Kotlin Playground</div>
+        
+        <h2 class="heading-2">6. Xây dựng hàm toán học cơ bản (Implement basic math operations)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Nắm vững kỹ thuật định nghĩa hàm người dùng tự đặt (User-defined functions) với tham số đầu vào và kiểu dữ liệu trả về xác định.</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Cú pháp định nghĩa hàm trong Kotlin sử dụng từ khóa 'fun', theo sau là tên hàm, danh sách tham số có chỉ định kiểu dữ liệu tường minh (name: Type) và kiểu trả về được đặt sau dấu hai chấm. Hàm add(firstNumber: Int, secondNumber: Int): Int thực hiện trả về tổng hai số qua lệnh return. Tương tự, hàm subtract thực thi phép trừ đại số. Việc đóng gói các phép tính thành hàm độc lập cho phép tái sử dụng mã nguồn tối ưu và nâng cao tính module hóa của chương trình.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">fun main() {
+    val firstNumber = 10
+    val secondNumber = 5
+    val thirdNumber = 8
+    
+    val result = add(firstNumber, secondNumber)
+    val anotherResult = subtract(firstNumber, thirdNumber)
+
+    println("$firstNumber + $secondNumber = $result")
+    println("$firstNumber - $thirdNumber = $anotherResult")
+}
+
+fun add(firstNumber: Int, secondNumber: Int): Int {
+    return firstNumber + secondNumber
+}
+
+fun subtract(firstNumber: Int, secondNumber: Int): Int {
+    return firstNumber - secondNumber
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>10 + 5 = 15
+10 - 8 = 2</pre>
+        <img class="screenshot-img" src="screenshots/c1_bai6.png" alt="Kết quả Bài 6">
+        <div class="figure-caption">Hình 6: Ảnh chụp màn hình kết quả chạy thực tế Bài 6 trên Kotlin Playground</div>
+        
+        <h2 class="heading-2">7. Thiết lập tham số mặc định và tham số theo tên (Default parameters)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Làm chủ tính năng tham số có giá trị mặc định (Default arguments) và cơ chế truyền tham số định danh theo tên (Named arguments).</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Kotlin hỗ trợ thiết lập giá trị mặc định cho tham số ngay tại khai báo hàm: operatingSystem: String = "Unknown OS". Khi lời gọi hàm không truyền giá trị cho tham số này, trình biên dịch sẽ tự động gán giá trị mặc định được thiết lập trước. Kết hợp cùng cơ chế Named Arguments (truyền rõ emailId = firstUserEmailId), lập trình viên có thể bỏ qua các tham số mặc định mà không phụ thuộc vào thứ tự vị trí xuất hiện của tham số trong hàm.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">fun main() {
+    val firstUserEmailId = "user_one@gmail.com"
+    println(displayAlertMessage(emailId = firstUserEmailId))
+    println()
+
+    val secondUserOperatingSystem = "Windows"
+    val secondUserEmailId = "user_two@gmail.com"
+    println(displayAlertMessage(secondUserOperatingSystem, secondUserEmailId))
+    println()
+
+    val thirdUserOperatingSystem = "Mac OS"
+    val thirdUserEmailId = "user_three@gmail.com"
+    println(displayAlertMessage(thirdUserOperatingSystem, thirdUserEmailId))
+    println()
+}
+
+fun displayAlertMessage(
+    operatingSystem: String = "Unknown OS",
+    emailId: String
+): String {
+    return "There's a new sign-in request on $operatingSystem for your Google Account $emailId."
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>There's a new sign-in request on Unknown OS for your Google Account user_one@gmail.com.
+
+There's a new sign-in request on Windows for your Google Account user_two@gmail.com.
+
+There's a new sign-in request on Mac OS for your Google Account user_three@gmail.com.</pre>
+        <img class="screenshot-img" src="screenshots/c1_bai7.png" alt="Kết quả Bài 7">
+        <div class="figure-caption">Hình 7: Ảnh chụp màn hình kết quả chạy thực tế Bài 7 trên Kotlin Playground</div>
+        
+        <h2 class="heading-2">8. Chuẩn hóa định danh theo quy ước Kotlin (Pedometer)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Áp dụng chuẩn quy tắc đặt tên chính thức của hệ sinh thái Kotlin (Kotlin Coding Conventions) - quy tắc lowerCamelCase.</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Đoạn mã ban đầu vi phạm nghiêm trọng quy chuẩn định danh (viết hoa tùy tiện như PEDOMETERstepsTOcalories, NumberOFStepS, Steps) và chứa các dấu chấm phẩy không cần thiết. Trong Kotlin, tên hàm và tên biến bắt buộc tuân theo quy tắc lowerCamelCase: bắt đầu bằng chữ cái thường, các từ kế tiếp viết hoa chữ cái đầu (pedometerStepsToCalories, numberOfSteps, steps). Đồng thời, ngôn ngữ Kotlin quy định dấu chấm phẩy (;) ở cuối câu lệnh là tùy chọn và được khuyến nghị loại bỏ hoàn toàn.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">fun main() {
+    val steps = 4000
+    val caloriesBurned = pedometerStepsToCalories(steps)
+    println("Walking $steps steps burns $caloriesBurned calories") 
+}
+
+fun pedometerStepsToCalories(numberOfSteps: Int): Double {
+    val caloriesBurnedForEachStep = 0.04
+    val totalCaloriesBurned = numberOfSteps * caloriesBurnedForEachStep
+    return totalCaloriesBurned
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>Walking 4000 steps burns 160.0 calories</pre>
+        <img class="screenshot-img" src="screenshots/c1_bai8.png" alt="Kết quả Bài 8">
+        <div class="figure-caption">Hình 8: Ảnh chụp màn hình kết quả chạy thực tế Bài 8 trên Kotlin Playground</div>
+        
+        <h2 class="heading-2">9. Xây dựng hàm so sánh điều kiện logic (Compare two numbers)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Ứng dụng các toán tử so sánh quan hệ để xây dựng hàm trả về kiểu dữ liệu logic Boolean (true / false).</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Hàm compareTime tiếp nhận 2 tham số số nguyên đại diện cho thời gian sử dụng điện thoại hôm nay và hôm qua. Biểu thức so sánh quan hệ timeSpentToday > timeSpentYesterday tự động đánh giá và trả về kết quả kiểu Boolean. Cú pháp ${compareTime(...)} trong String Template cho phép nhúng trực tiếp giá trị logic của biểu thức vào chuỗi in ra màn hình mà không cần trung gian biến phụ.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">fun main() {
+    println("Have I spent more time using my phone today: ${compareTime(300, 250)}")
+    println("Have I spent more time using my phone today: ${compareTime(300, 300)}")
+    println("Have I spent more time using my phone today: ${compareTime(200, 220)}")
+}
+
+fun compareTime(timeSpentToday: Int, timeSpentYesterday: Int): Boolean {
+    return timeSpentToday > timeSpentYesterday
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>Have I spent more time using my phone today: true
+Have I spent more time using my phone today: false
+Have I spent more time using my phone today: false</pre>
+        <img class="screenshot-img" src="screenshots/c1_bai9.png" alt="Kết quả Bài 9">
+        <div class="figure-caption">Hình 9: Ảnh chụp màn hình kết quả chạy thực tế Bài 9 trên Kotlin Playground</div>
+        
+        <h2 class="heading-2">10. Tối ưu hóa mã nguồn và loại bỏ trùng lặp (Duplicate code)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Thực hiện nguyên lý kỹ nghệ phần mềm DRY (Don't Repeat Yourself) thông qua việc tái cấu trúc các lệnh in lặp lại thành một hàm tham số hóa.</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Chương trình ban đầu lặp lại 4 khối lệnh println() cố định để in thời tiết của từng thành phố, gây dư thừa mã và tăng chi phí bảo trì khi dữ liệu thay đổi. Giải pháp tối ưu là gom nhóm cấu trúc in ấn thành hàm dùng chung printWeatherForCity tiếp nhận 4 tham số: tên thành phố, nhiệt độ thấp, nhiệt độ cao và xác suất mưa. Khi đó, hàm main() chỉ thực hiện gọi hàm với các bộ dữ liệu cụ thể, giúp mã nguồn cô đọng, dễ đọc và dễ mở rộng.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">fun main() {
+    printWeatherForCity("Ankara", 27, 31, 82)
+    printWeatherForCity("Tokyo", 32, 36, 10)
+    printWeatherForCity("Cape Town", 59, 64, 2)
+    printWeatherForCity("Guatemala City", 50, 55, 7)
+}
+
+fun printWeatherForCity(cityName: String, lowTemp: Int, highTemp: Int, chanceOfRain: Int) {
+    println("City: $cityName")
+    println("Low temperature: $lowTemp, High temperature: $highTemp")
+    println("Chance of rain: $chanceOfRain%")
+    println()
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>City: Ankara
+Low temperature: 27, High temperature: 31
+Chance of rain: 82%
+
+City: Tokyo
+Low temperature: 32, High temperature: 36
+Chance of rain: 10%
+
+City: Cape Town
+Low temperature: 59, High temperature: 64
+Chance of rain: 2%
+
+City: Guatemala City
+Low temperature: 50, High temperature: 55
+Chance of rain: 7%</pre>
+        <img class="screenshot-img" src="screenshots/c1_bai10.png" alt="Kết quả Bài 10">
+        <div class="figure-caption">Hình 10: Ảnh chụp màn hình kết quả chạy thực tế Bài 10 trên Kotlin Playground</div>
+        
+        <div class="page-break"></div>
+        <h1 class="heading-1">III. NỘI DUNG VÀ KẾT QUẢ THỰC HÀNH CODELAB 2: KOTLIN FUNDAMENTALS</h1>
+        <p class="para-noindent">Codelab 2 nâng cấp độ phức tạp, tập trung vào cấu trúc điều khiển nâng cao, hàm bậc cao, biểu thức Lambda, lập trình hướng đối tượng và an toàn dữ liệu Null Safety thông qua 7 bài tập chuyên sâu:</p>
+    
+        <h2 class="heading-2">1. Điều kiện rẽ nhánh thông báo di động (Mobile notifications)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Ứng dụng cấu trúc điều khiển rẽ nhánh if/else để xử lý logic tóm tắt số lượng thông báo theo ngưỡng giới hạn.</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Chương trình mô phỏng tính năng gom nhóm thông báo trên hệ điều hành Android. Hàm printNotificationSummary sử dụng cấu trúc if/else để kiểm tra biến numberOfMessages. Nếu số lượng thông báo nhỏ hơn 100, hệ thống xuất thông báo cụ thể kèm số lượng chính xác; ngược lại nếu đạt từ 100 thông báo trở lên, hệ thống hiển thị chuỗi cảnh báo quy ước 99+ để tránh tràn giao diện người dùng.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">fun main() {
+    val morningNotification = 51
+    val eveningNotification = 135
+    
+    printNotificationSummary(morningNotification)
+    printNotificationSummary(eveningNotification)
+}
+
+fun printNotificationSummary(numberOfMessages: Int) {
+    if (numberOfMessages < 100) {
+        println("You have $numberOfMessages notifications.")
+    } else {
+        println("Your phone is blowing up! You have 99+ notifications.")
+    }
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>You have 51 notifications.
+Your phone is blowing up! You have 99+ notifications.</pre>
+        <img class="screenshot-img" src="screenshots/c2_bai1.png" alt="Kết quả Bài 1">
+        <div class="figure-caption">Hình 11: Ảnh chụp màn hình kết quả chạy thực tế Bài 1 (Codelab 2) trên Kotlin Playground</div>
+        
+        <h2 class="heading-2">2. Biểu thức kiểm tra theo dải giá trị tính giá vé (Movie-ticket price)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Sử dụng biểu thức 'when' kết hợp dải giá trị (range in ..) để thay thế cấu trúc if-else phân nhánh phức tạp.</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Trong Kotlin, 'when' là một biểu thức có khả năng trả về giá trị (expression) thay vì chỉ đóng vai trò câu lệnh điều khiển như switch-case truyền thống. Dải giá trị (in 0..12, in 13..60, in 61..100) giúp mã nguồn trực quan, dễ quản lý các khoảng độ tuổi. Tại nhóm tuổi lao động (13..60), một biểu thức điều kiện ngắn gọn if (isMonday) 25 else 30 được lồng ghép để áp dụng giá ưu đãi ngày đầu tuần. Ký tự escape \$ được dùng để xuất biểu tượng tiền tệ đô-la ra màn hình mà không kích hoạt cú pháp String Template.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">fun main() {
+    val child = 5
+    val adult = 28
+    val senior = 87
+    
+    val isMonday = true
+    
+    println("The movie ticket price for a person aged $child is \$${ticketPrice(child, isMonday)}.")
+    println("The movie ticket price for a person aged $adult is \$${ticketPrice(adult, isMonday)}.")
+    println("The movie ticket price for a person aged $senior is \$${ticketPrice(senior, isMonday)}.")
+}
+ 
+fun ticketPrice(age: Int, isMonday: Boolean): Int {
+    return when(age) {
+        in 0..12 -> 15
+        in 13..60 -> if (isMonday) 25 else 30
+        in 61..100 -> 20
+        else -> -1
+    }
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>The movie ticket price for a person aged 5 is $15.
+The movie ticket price for a person aged 28 is $25.
+The movie ticket price for a person aged 87 is $20.</pre>
+        <img class="screenshot-img" src="screenshots/c2_bai2.png" alt="Kết quả Bài 2">
+        <div class="figure-caption">Hình 12: Ảnh chụp màn hình kết quả chạy thực tế Bài 2 (Codelab 2) trên Kotlin Playground</div>
+        
+        <h2 class="heading-2">3. Ứng dụng hàm bậc cao và biểu thức Lambda (Temperature converter)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Làm chủ khái niệm Hàm bậc cao (Higher-Order Functions), cú pháp biểu thức Lambda và quy tắc Trailing Lambda trong Kotlin.</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Hàm bậc cao printFinalTemperature nhận tham số cuối cùng là một biến kiểu hàm: conversionFormula: (Double) -> Double. Theo quy ước Trailing Lambda của Kotlin, nếu tham số cuối cùng của hàm là một lambda expression, ta có thể đặt khối mã lambda ngoài cặp ngoặc đơn. Trong thân biểu thức lambda, từ khóa ngầm định 'it' đại diện cho tham số đầu vào duy nhất (giá trị nhiệt độ ban đầu). Hàm String.format("%.2f", ...) thực hiện làm tròn kết quả đến 2 chữ số thập phân trước khi xuất chuỗi.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">fun main() {    
+    printFinalTemperature(27.0, "Celsius", "Fahrenheit") { 9.0 / 5.0 * it + 32 }
+    printFinalTemperature(350.0, "Kelvin", "Celsius") { it - 273.15 }
+    printFinalTemperature(10.0, "Fahrenheit", "Kelvin") { 5.0 / 9.0 * (it - 32) + 273.15 }
+}
+
+fun printFinalTemperature(
+    initialMeasurement: Double, 
+    initialUnit: String, 
+    finalUnit: String, 
+    conversionFormula: (Double) -> Double
+) {
+    val finalMeasurement = String.format("%.2f", conversionFormula(initialMeasurement))
+    println("$initialMeasurement degrees $initialUnit is $finalMeasurement degrees $finalUnit.")
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>27.0 degrees Celsius is 80.60 degrees Fahrenheit.
+350.0 degrees Kelvin is 76.85 degrees Celsius.
+10.0 degrees Fahrenheit is 260.93 degrees Kelvin.</pre>
+        <img class="screenshot-img" src="screenshots/c2_bai3.png" alt="Kết quả Bài 3">
+        <div class="figure-caption">Hình 13: Ảnh chụp màn hình kết quả chạy thực tế Bài 3 (Codelab 2) trên Kotlin Playground</div>
+        
+        <h2 class="heading-2">4. Lập trình hướng đối tượng với Class và Custom Getter (Song catalog)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Khởi tạo lớp (Class), hàm khởi tạo chính (Primary Constructor) và thiết lập hàm lấy dữ liệu tùy biến (Custom Getter) cho thuộc tính động.</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Lớp Song được khai báo gọn gàng với Primary Constructor chứa 4 thuộc tính cơ bản. Điểm đặc thù trong lập trình Kotlin là thuộc tính isPopular không cấp phát vùng nhớ lưu trữ tĩnh, mà sử dụng Custom Getter: get() = playCount >= 1000. Mỗi khi thuộc tính isPopular được truy xuất, trình biên dịch sẽ tự động tính toán lại điều kiện dựa trên giá trị playCount hiện tại. Phương thức printDescription() đảm nhiệm việc xuất thông tin mô tả chi tiết của đối tượng bài hát.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">fun main() {    
+    val brunoSong = Song("We Don't Talk About Bruno", "Encanto Cast", 2022, 1_000_000)
+    brunoSong.printDescription()
+    println(brunoSong.isPopular)
+}
+
+class Song(
+    val title: String, 
+    val artist: String, 
+    val yearPublished: Int, 
+    val playCount: Int
+) {
+    val isPopular: Boolean
+        get() = playCount >= 1000
+
+    fun printDescription() {
+        println("$title, performed by $artist, was released in $yearPublished.")
+    }   
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>We Don't Talk About Bruno, performed by Encanto Cast, was released in 2022.
+true</pre>
+        <img class="screenshot-img" src="screenshots/c2_bai4.png" alt="Kết quả Bài 4">
+        <div class="figure-caption">Hình 14: Ảnh chụp màn hình kết quả chạy thực tế Bài 4 (Codelab 2) trên Kotlin Playground</div>
+        
+        <h2 class="heading-2">5. Quản lý thuộc tính Nullable và cơ chế an toàn Null Safety (Internet profile)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Áp dụng cơ chế an toàn bộ nhớ (Null Safety), kiểu dữ liệu cho phép chứa null (Nullable types) và kỹ thuật Smart Cast của Kotlin.</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Trong lớp Person, hai thuộc tính hobby và referrer được khai báo kiểu Nullable (String? và Person?) cho phép mang giá trị null khi người dùng không cung cấp thông tin. Trong phương thức showProfile(), việc kiểm tra điều kiện if (hobby != null) và if (referrer != null) giúp kích hoạt tính năng Smart Cast của trình biên dịch Kotlin: tự động ép kiểu đối tượng về kiểu non-null tương ứng trong phạm vi khối lệnh. Điều này loại bỏ hoàn toàn nguy cơ phát sinh ngoại lệ kinh điển NullPointerException trong môi trường thực thi Android.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">fun main() {    
+    val amanda = Person("Amanda", 33, "play tennis", null)
+    val atiqah = Person("Atiqah", 28, "climb", amanda)
+    
+    amanda.showProfile()
+    atiqah.showProfile()
+}
+
+class Person(val name: String, val age: Int, val hobby: String?, val referrer: Person?) {
+    fun showProfile() {
+        println("Name: $name")
+        println("Age: $age")
+        if (hobby != null) {
+            print("Likes to $hobby. ")
+        }
+        if (referrer != null) {
+            print("Has a referrer named ${referrer.name}")
+            if (referrer.hobby != null) {
+                print(", who likes to ${referrer.hobby}.")
+            } else {
+                print(".")
+            }
+        } else {
+            print("Doesn't have a referrer.")
+        }
+        print("\n\n")
+    }
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>Name: Amanda
+Age: 33
+Likes to play tennis. Doesn't have a referrer.
+
+Name: Atiqah
+Age: 28
+Likes to climb. Has a referrer named Amanda, who likes to play tennis.</pre>
+        <img class="screenshot-img" src="screenshots/c2_bai5.png" alt="Kết quả Bài 5">
+        <div class="figure-caption">Hình 15: Ảnh chụp màn hình kết quả chạy thực tế Bài 5 (Codelab 2) trên Kotlin Playground</div>
+        
+        <h2 class="heading-2">6. Cơ chế kế thừa và ghi đè phương thức (Foldable phones)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Làm chủ tính kế thừa (Inheritance) trong Kotlin bằng từ khóa 'open' và ghi đè phương thức (method overriding) bằng từ khóa 'override'.</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Mặc định trong Kotlin, mọi lớp và phương thức đều ở trạng thái 'final' (đóng, không cho phép kế thừa). Để cho phép lớp con kế thừa và tùy biến hành vi, lớp cha Phone và phương thức switchOn() bắt buộc phải được đánh dấu bằng từ khóa 'open'. Lớp con FoldablePhone kế thừa Phone và ghi đè lại hàm switchOn() với từ khóa 'override': màn hình điện thoại chỉ được kích hoạt bật sáng khi thiết bị đang ở trạng thái mở (!isFolded). Các phương thức fold() và unfold() điều khiển trạng thái vật lý của thiết bị.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">open class Phone(var isScreenLightOn: Boolean = false) {
+    open fun switchOn() {
+        isScreenLightOn = true
+    }
+    
+    fun switchOff() {
+        isScreenLightOn = false
+    }
+    
+    fun checkPhoneScreenLight() {
+        val phoneScreenLight = if (isScreenLightOn) "on" else "off"
+        println("The phone screen's light is $phoneScreenLight.")
+    }
+}
+
+class FoldablePhone(var isFolded: Boolean = true) : Phone() {
+    override fun switchOn() {
+        if (!isFolded) {
+            isScreenLightOn = true
+        }
+    }
+    
+    fun fold() {
+        isFolded = true
+    }
+    
+    fun unfold() {
+        isFolded = false
+    }
+}
+
+fun main() {    
+    val newFoldablePhone = FoldablePhone()
+    
+    newFoldablePhone.switchOn()
+    newFoldablePhone.checkPhoneScreenLight()
+    newFoldablePhone.unfold()
+    newFoldablePhone.switchOn()
+    newFoldablePhone.checkPhoneScreenLight()
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>The phone screen's light is off.
+The phone screen's light is on.</pre>
+        <img class="screenshot-img" src="screenshots/c2_bai6.png" alt="Kết quả Bài 6">
+        <div class="figure-caption">Hình 16: Ảnh chụp màn hình kết quả chạy thực tế Bài 6 (Codelab 2) trên Kotlin Playground</div>
+        
+        <h2 class="heading-2">7. Xử lý giá trị mặc định bằng toán tử Elvis và Safe Call (Special auction)</h2>
+        <h3 class="heading-3">a) Yêu cầu và phân tích kỹ thuật</h3>
+        <p class="para-noindent"><b>Mục tiêu bài tập:</b> Vận dụng kết hợp toán tử gọi an toàn (Safe Call ?.) và toán tử gán giá trị dự phòng Elvis (?:) để xử lý logic dữ liệu rỗng.</p>
+        <p class="para"><b>Phân tích giải pháp:</b> Hàm auctionPrice tiếp nhận tham số bid có thể null (Bid?) và minimumPrice: Int. Biểu thức bid?.amount ?: minimumPrice hoạt động theo cơ chế ngắn gọn: nếu đối tượng bid khác null, toán tử safe call lấy giá trị thuộc tính amount; ngược lại nếu bid là null, toán tử Elvis (?:) lập tức trả về giá trị mặc định minimumPrice. Cú pháp một dòng này giúp chương trình vừa an toàn tuyệt đối trước nguy cơ lỗi null, vừa tối ưu hóa độ dài và tính rõ ràng của mã nguồn.</p>
+        
+        <h3 class="heading-3">b) Mã nguồn chương trình hoàn chỉnh</h3>
+        <pre class="code-box">fun main() {
+    val winningBid = Bid(5000, "Private Collector")
+    
+    println("Item A is sold at ${auctionPrice(winningBid, 2000)}.")
+    println("Item B is sold at ${auctionPrice(null, 3000)}.")
+}
+
+class Bid(val amount: Int, val bidder: String)
+
+fun auctionPrice(bid: Bid?, minimumPrice: Int): Int {
+    return bid?.amount ?: minimumPrice
+}</pre>
+
+        <h3 class="heading-3">c) Kết quả thực thi và ảnh minh chứng</h3>
+        <pre class="output-box"><div class="output-title">CONSOLE OUTPUT:</div>Item A is sold at 5000.
+Item B is sold at 3000.</pre>
+        <img class="screenshot-img" src="screenshots/c2_bai7.png" alt="Kết quả Bài 7">
+        <div class="figure-caption">Hình 17: Ảnh chụp màn hình kết quả chạy thực tế Bài 7 (Codelab 2) trên Kotlin Playground</div>
+        
+        <div class="page-break"></div>
+        <h1 class="heading-1">IV. TỔNG KẾT VÀ BÀI HỌC KINH NGHIỆM</h1>
+        <h2 class="heading-2">1. Tổng kết kết quả học tập</h2>
+        <p class="para">Thông qua quá trình nghiên cứu và giải quyết trọn vẹn 17 bài tập thuộc 2 bài thực hành lớn của Google Android:</p>
+        <p class="para">- Sinh viên đã nắm bắt vững chắc tư duy lập trình hiện đại của Kotlin, đặc biệt là khả năng viết mã ngắn gọn, rõ nghĩa nhưng bảo đảm an toàn dữ liệu mức cao nhất.</p>
+        <p class="para">- Đã làm chủ hoàn toàn các kỹ thuật nền tảng: từ biến, hàm, xử lý chuỗi đến cấu trúc hướng đối tượng, hàm bậc cao và xử lý an toàn rỗng (Null Safety).</p>
+
+        <h2 class="heading-2">2. Ý nghĩa đối với việc phát triển ứng dụng Jetpack Compose</h2>
+        <p class="para">Các khái niệm được thực hành trong Codelab (đặc biệt là Lambda, Trailing Lambda, Higher-Order Functions, Class và Custom Getter) chính là xương sống cấu tạo nên toàn bộ kiến trúc của Jetpack Compose. Việc làm chủ các kiến thức này là bước chuẩn bị hoàn hảo để xây dựng các Composable functions phức tạp và triển khai ứng dụng Android thương mại chất lượng cao.</p>
+
+        <table class="signature-table">
+            <tr>
+                <td>
+                    <div class="sign-title">GIẢNG VIÊN HƯỚNG DẪN / CHẤM BÀI</div>
+                    <i>(Ký và ghi rõ họ tên)</i>
+                    <div class="sign-space"></div>
+                    <b>Thầy Vui</b>
+                </td>
+                <td>
+                    <i>Hà Nội, ngày 22 tháng 09 năm 2026</i><br>
+                    <div class="sign-title">SINH VIÊN THỰC HIỆN</div>
+                    <i>(Ký và ghi rõ họ tên)</i>
+                    <div class="sign-space"></div>
+                    <div>....................................................</div>
+                </td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>

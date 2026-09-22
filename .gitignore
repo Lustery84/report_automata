@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Temporary Office / Word locks
+~$*.docx
+~$*.doc
+~$*.xlsx
+~$*.pptx
+
+# OS & Editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Logs & temporary runtime files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.system_generated/
+
+# Secrets & Environment
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.cert
+credentials.json

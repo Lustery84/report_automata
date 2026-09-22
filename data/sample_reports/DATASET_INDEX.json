@@ -1,0 +1,34 @@
+[
+  {
+    "id": "kinhte_fpt",
+    "title": "Báo Cáo Phân Tích BCTC & Định Giá Cổ Phiếu FPT 2021-2025",
+    "school": "Đại Học Kinh Tế Quốc Dân (NEU)",
+    "discipline": "Kinh Tế & Tài Chính",
+    "file": "data/sample_reports/KINHTE_PhanTich_BCTC_FPT.md",
+    "highlights": "BCTC kiểm toán PwC, Dupont 5 nhân tố, định giá DCF WACC=9.85%, phân tích độ nhạy 2 chiều, chuẩn APA 7th."
+  },
+  {
+    "id": "cntt_android",
+    "title": "Đồ Án Xây Dựng Ứng Dụng Quản Lý Tài Chính Kotlin Clean Architecture",
+    "school": "Đại Học Bách Khoa Hà Nội (HUST)",
+    "discipline": "Công Nghệ Thông Tin",
+    "file": "data/sample_reports/CNTT_DoAn_KiemThu_PhanMem.md",
+    "highlights": "Clean Architecture 3 lớp, Coroutines/Flow, ERD Data Dictionary, JaCoCo Unit Test 89.5%, chuẩn IEEE."
+  },
+  {
+    "id": "kythuat_lora",
+    "title": "Đồ Án Thiết Kế Trạm Quan Trắc Môi Trường Thông Minh LoRaWAN & ESP32",
+    "school": "Đại Học Bách Khoa TP.HCM (HCMUT)",
+    "discipline": "Kỹ Thuật & Tự Động Hóa",
+    "file": "data/sample_reports/KYTHUAT_HeThong_Nhung_IoT.md",
+    "highlights": "Bảng BOM linh kiện, tính toán dòng điện pin 18650, thuật toán Moving Average C++, đo kiểm thực nghiệm tầm xa 6.8km."
+  },
+  {
+    "id": "xahoi_tiktok",
+    "title": "Nghiên Cứu Hành Vi Mua Hàng Ngẫu Hứng Gen Z Trên TikTok Shop",
+    "school": "ĐH Khoa Học Xã Hội & Nhân Văn (VNU-USSH)",
+    "discipline": "Khoa Học Xã Hội & Truyền Thông",
+    "file": "data/sample_reports/XAHOI_NghienCuu_GenZ_Shopee.md",
+    "highlights": "Mẫu khảo sát N=485, Cronbach Alpha > 0.8, hồi quy đa biến R2=0.584, mô hình S-O-R, chuẩn APA 7th."
+  }
+]
