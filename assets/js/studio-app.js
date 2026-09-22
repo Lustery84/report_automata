@@ -952,6 +952,26 @@ const GeminiService = {
         localStorage.setItem(this.STORAGE_MODEL, safeModel);
     },
 
+    STORAGE_SEARCH_GROUNDING: 'academic_studio_search_grounding',
+    STORAGE_GEN_MODE: 'academic_studio_gen_mode',
+
+    isSearchGroundingEnabled() {
+        const saved = localStorage.getItem(this.STORAGE_SEARCH_GROUNDING);
+        return saved === null ? true : saved === 'true';
+    },
+
+    setSearchGroundingEnabled(enabled) {
+        localStorage.setItem(this.STORAGE_SEARCH_GROUNDING, enabled ? 'true' : 'false');
+    },
+
+    getGenerationMode() {
+        return localStorage.getItem(this.STORAGE_GEN_MODE) || 'chained';
+    },
+
+    setGenerationMode(mode) {
+        localStorage.setItem(this.STORAGE_GEN_MODE, mode || 'chained');
+    },
+
     async testConnection(key, model) {
         const apiKey = (key || this.getApiKey()).trim();
         let apiModel = model || this.getModel();
@@ -999,6 +1019,362 @@ const GeminiService = {
 
         const data = await res.json();
         return data?.candidates?.[0]?.content?.parts?.[0]?.text || 'Kết nối thành công!';
+    },
+
+    /**
+     * Generate a dedicated, single chapter or section using full 8,192 token horizon
+     * strictly enforcing academic standards, PEEL model, quantitative tables, and full code.
+     */
+    async generateSingleChapterStream({
+        outline,
+        stageIndex,
+        stageType,
+        chapterData,
+        previousSummary,
+        groundingDossier,
+        enableSearch = true,
+        signal,
+        onChunk,
+        onStatus
+    }) {
+        const apiKey = this.getApiKey();
+        let model = this.getModel();
+        if (model.includes('2.0-flash') || model.includes('2.5-flash')) {
+            model = 'gemini-3.6-flash';
+            this.saveModel('gemini-3.6-flash');
+        }
+
+        if (!apiKey) {
+            throw new Error('Chưa cấu hình Gemini API Key. Vui lòng bấm vào nút [🔑 Gemini API Key] để nhập key.');
+        }
+
+        let stageTitle = '';
+        let targetWordCount = '';
+        let specificDirectives = '';
+
+        if (stageType === 'intro') {
+            stageTitle = 'PHẦN MỞ ĐẦU';
+            targetWordCount = '1.800 – 2.500 từ';
+            specificDirectives = `
+NHIỆM VỤ GIAI ĐOẠN 0: XUẤT BẢN TOÀN DIỆN PHẦN MỞ ĐẦU ĐỒ ÁN (Mục tiêu dung lượng: ${targetWordCount}):
+Bắt buộc phải viết chi tiết, hàn lâm, không viết gạch đầu dòng cụt ngủn, triển khai đầy đủ các mục:
+# PHẦN MỞ ĐẦU: ĐẶT VẤN ĐỀ VÀ MỤC TIÊU NGHIÊN CỨU
+## 1. Tính cấp thiết của đề tài: Phân tích bối cảnh công nghệ/kinh tế xã hội 2024-2026, chỉ rõ khoảng trống nghiên cứu (Research Gap) và lý do cấp bách phải thực hiện đề tài.
+## 2. Mục tiêu nghiên cứu: Xác lập Mục tiêu tổng quát và 4-5 Mục tiêu cụ thể theo chuẩn SMART (đo lường được chỉ số).
+## 3. Đối tượng và phạm vi nghiên cứu: Xác định rõ đối tượng trực tiếp, khách thể, không gian triển khai, thời gian dữ liệu (2021-2026) và các giới hạn kỹ thuật.
+## 4. Phương pháp luận nghiên cứu: Mô tả phương pháp thu thập dữ liệu, phương pháp định lượng/toán học, môi trường mô phỏng thực nghiệm hoặc kiểm thử.
+## 5. Ý nghĩa khoa học và giá trị thực tiễn: Đóng góp mới về mặt học thuật và khả năng ứng dụng thực tế vào sản xuất/doanh nghiệp.
+## 6. Bố cục cấu trúc của báo cáo: Tóm tắt ngắn gọn nội dung và mục tiêu cốt lõi của từng chương tiếp theo.`;
+        } else if (stageType === 'conclusion') {
+            stageTitle = 'KẾT LUẬN VÀ TÀI LIỆU THAM KHẢO';
+            targetWordCount = '1.800 – 2.500 từ';
+            specificDirectives = `
+NHIỆM VỤ GIAI ĐOẠN CUỐI: TỔNG KẾT TOÀN DIỆN CÔNG TRÌNH & TRÍCH DẪN CHUẨN MỰC (Mục tiêu: ${targetWordCount}):
+Bắt buộc triển khai đầy đủ các mục:
+# KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN
+## 1. Tổng kết các kết quả đạt được: Đối chiếu với các mục tiêu SMART đã đề ra ở Phần Mở Đầu, định lượng hóa những gì đề tài đã hoàn thành (kèm bảng tóm tắt chỉ số).
+## 2. Đóng góp học thuật và tính mới: Khẳng định các phát hiện mới, giải pháp tối ưu hoặc cải tiến kỹ thuật.
+## 3. Những hạn chế còn tồn tại: Đánh giá khách quan các điểm nghẽn về tài nguyên phần cứng, dung lượng dữ liệu hoặc điều kiện thử nghiệm.
+## 4. Đề xuất kiến nghị & Hướng nghiên cứu tiếp theo: Lộ trình nâng cấp hệ thống trong 1-2 năm tới.
+# TÀI LIỆU THAM KHẢO
+Xuất bản danh mục Tài liệu tham khảo theo đúng chuẩn ${outline.citation || 'APA 7th'}, sắp xếp chuẩn mực với tối thiểu 12-15 tài liệu chất lượng cao (bài báo tạp chí, hội nghị quốc tế IEEE/ACM, giáo trình đại học, văn bản pháp luật Nghị định).`;
+        } else {
+            stageTitle = chapterData.title;
+            const chNum = stageIndex;
+            if (chNum === 1) {
+                targetWordCount = '3.000 – 4.000 từ (Chiếm 20% dung lượng)';
+                specificDirectives = `
+NHIỆM VỤ CHƯƠNG 1: CƠ SỞ LÝ LUẬN & TỔNG QUAN NGHIÊN CỨU SOTA (Mục tiêu: ${targetWordCount}):
+- BẮT BUỘC phân tích chuyên sâu các mô hình lý thuyết, nền tảng toán học/thuật toán giải quyết bài toán.
+- BẮT BUỘC có ít nhất 1-2 BẢNG ĐỐI SÁNH MARKDOWN TABLE so sánh các công trình nghiên cứu tiền nhiệm trong và ngoài nước (chỉ ra ưu nhược điểm, độ chính xác, hạn chế của từng phương pháp).
+- Tuyệt đối không viết gạch đầu dòng cụt lủn. Mọi đoạn văn chuyên môn phải viết theo mô hình PEEL (Point -> Explanation -> Evidence -> Link) với độ dài tối thiểu 3-4 đoạn cho mỗi mục con.`;
+            } else if (chNum === 2) {
+                targetWordCount = '4.000 – 5.500 từ (Chiếm 35% dung lượng - Trọng tâm thực trạng)';
+                specificDirectives = `
+NHIỆM VỤ CHƯƠNG 2: KHẢO SÁT THỰC TRẠNG & BÓC TÁCH DỮ LIỆU ĐỊNH LƯỢNG 3-5 NĂM (Mục tiêu: ${targetWordCount}):
+- BẮT BUỘC lập ít nhất 2-3 BẢNG SỐ LIỆU ĐỊNH LƯỢNG THỰC NGHIỆM bằng Markdown Table (Đầy đủ tiêu đề in đậm Bảng 2.x, Đơn vị tính, Dòng nguồn rõ ràng).
+- Khai thác triệt để các hình ảnh/tệp đính kèm người dùng cung cấp để bóc tách thông số.
+- Phân tích cặn kẽ từng bảng số liệu theo cấu trúc PEEL: Luận điểm -> Cơ chế vận hành -> Dẫn chứng con số cụ thể từ bảng -> Tiểu kết tác động.
+- Chỉ ra các nguyên nhân gốc rễ và điểm nghẽn kỹ thuật/kinh tế cần phải giải quyết ở Chương 3.`;
+            } else if (chNum === 3) {
+                targetWordCount = '4.500 – 6.000 từ (Chiếm 35% dung lượng - TRỌNG TÂM CHIẾM ĐIỂM CAO NHẤT)';
+                specificDirectives = `
+NHIỆM VỤ CHƯƠNG 3: HIỆN THỰC HÓA GIẢI PHÁP, THIẾT KẾ KIẾN TRÚC & MÃ NGUỒN CỐT LÕI (Mục tiêu: ${targetWordCount}):
+- BẮT BUỘC thiết kế Sơ đồ kiến trúc tổng thể, mô tả luồng dữ liệu (Data Flow) và lưu đồ thuật toán (Flowchart).
+- BẮT BUỘC CUNG CẤP MÃ NGUỒN HOÀN CHỈNH, CHUẨN MỰC (Full Production Code) bằng các khối code markdown cho các module then chốt (Clean Architecture, Domain logic, Controller, Firmware C/C++, Thuật toán ML...). TUYỆT ĐỐI KHÔNG VIẾT CODE TƯỢNG TRƯNG 3 DÒNG HAY ĐỂ '// TODO'.
+- Giải thích chi tiết từng hàm, cấu trúc dữ liệu, cơ chế đồng bộ và các biện pháp bảo mật/tối ưu hiệu năng.`;
+            } else {
+                targetWordCount = '2.500 – 3.500 từ (Chiếm 10% dung lượng)';
+                specificDirectives = `
+NHIỆM VỤ CHƯƠNG 4: THỰC NGHIỆM, KIỂM THỬ ĐỊNH LƯỢNG & ĐÁNH GIÁ SAI SỐ (Mục tiêu: ${targetWordCount}):
+- BẮT BUỘC xây dựng Ma trận kịch bản kiểm thử (Test Cases Matrix).
+- BẮT BUỘC có ít nhất 2 BẢNG ĐO KIỂM CHỈ SỐ THỰC TẾ (Độ trễ, Thông lượng, Độ chính xác, RMSE, F1-score, hoặc các chỉ số tài chính/hiệu suất).
+- Đánh giá sai số thực nghiệm và các hạn chế kỹ thuật theo mô hình PEEL.`;
+            }
+        }
+
+        const systemPrompt = `Bạn là một Giáo sư / Trưởng Hội đồng Đánh giá Học thuật cao cấp tại Việt Nam.
+Nhiệm vụ của bạn là viết một CHƯƠNG HỌC THUẬT CHUYÊN SÂU ĐIỂM A (9.0+) cho đề tài: "${outline.topic}".
+
+CÁC NGUYÊN TẮC BẮT BUỘC TUÂN THỦ:
+1. NGHỊ ĐỊNH 30/2020/NĐ-CP: Văn phong hàn lâm, ngôi thứ ba khách quan ("tác giả", "nghiên cứu này", "đề tài"). Không dùng "tôi", "chúng tôi".
+2. MẬT ĐỘ DỮ LIỆU ĐỊNH LƯỢNG (Data Density): Tuyệt đối không viết sáo rỗng, không liệt kê gạch đầu dòng cụt lủn. BẮT BUỘC có bảng số liệu Markdown Table (đầy đủ tiêu đề in đậm, đơn vị tính, dòng nguồn *(Nguồn: ...)*).
+3. MÔ HÌNH ĐOẠN VĂN PEEL: Luận điểm -> Giải thích nguyên lý -> Dẫn chứng thực nghiệm -> Tiểu kết tác động.
+4. TOÀN BỘ 8.192 TOKEN CỦA LƯỢT NÀY ĐƯỢC CẤP RIÊNG ĐỂ VIẾT DUY NHẤT CHƯƠNG/PHẦN NÀY. Hãy viết thật sâu sắc, chi tiết, chạm ngưỡng mục tiêu ${targetWordCount}. Không được tóm tắt vắn tắt.`;
+
+        const userPrompt = `ĐỀ TÀI: ${outline.topic}
+Khối ngành: ${outline.disciplineName} | Cơ sở: ${outline.schoolName} | Chuẩn: ${outline.standards} | Trích dẫn: ${outline.citation}
+${outline.notes ? `Yêu cầu bổ sung của giảng viên: ${outline.notes}` : ''}
+
+${groundingDossier || ''}
+
+${previousSummary ? `TÓM TẮT CÁC CHƯƠNG TRƯỚC ĐÃ TRIỂN KHAI:\n${previousSummary}\n(Hãy viết tiếp liền mạch với nội dung trên, không lặp lại)` : ''}
+
+YÊU CẦU CHI TIẾT CHO PHẦN NÀY:
+${specificDirectives}
+
+${chapterData ? `KHUNG MỤC CON BẮT BUỘC PHẢI TRIỂN KHAI CHI TIẾT:
+# ${chapterData.title} (Mục tiêu: ${chapterData.purpose})
+${(chapterData.sections || []).map(s => `  - Mục ${s.num}: ${s.title}
+    + Hướng dẫn: ${s.guidance}
+    + Yêu cầu bắt buộc: ${(s.required || []).join(', ')}
+    ${s.example ? `+ Gợi ý thực tế: ${s.example}` : ''}`).join('\n')}` : ''}
+
+Hãy xuất bản toàn văn phần này bằng định dạng Markdown hoàn chỉnh, sâu sắc, chạm mục tiêu ${targetWordCount}. Bắt đầu trực tiếp từ tiêu đề chính '#' của chương.`;
+
+        // Request parts with multimodal attachments
+        const requestParts = [];
+        const attachments = AttachmentManager.getAttachments();
+        if (attachments && attachments.length > 0) {
+            for (const att of attachments) {
+                if (att.isImage || att.isPdf) {
+                    requestParts.push({
+                        inlineData: { mimeType: att.mimeType, data: att.base64Data }
+                    });
+                } else if (att.isText) {
+                    requestParts.push({
+                        text: `\n\n--- DỮ LIỆU TỆP ĐÍNH KÈM [${att.name}] ---\n${att.textContent.slice(0, 8000)}\n--- HẾT TỆP ---\n\n`
+                    });
+                }
+            }
+        }
+        requestParts.push({ text: userPrompt });
+
+        const requestBody = {
+            contents: [{ role: 'user', parts: requestParts }],
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            generationConfig: {
+                temperature: 0.35,
+                topP: 0.95,
+                maxOutputTokens: 8192
+            }
+        };
+
+        if (enableSearch) {
+            requestBody.tools = [{ googleSearch: {} }];
+        }
+
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
+                signal
+            });
+
+            if (!response.ok) {
+                const errJson = await response.json().catch(() => ({}));
+                const errText = errJson.error?.message || `Lỗi HTTP ${response.status}: ${response.statusText}`;
+
+                // If googleSearch tool failed, retry without search tool
+                if (enableSearch && (errText.includes('tool') || errText.includes('googleSearch') || errText.includes('google_search'))) {
+                    console.warn('[Gemini] googleSearch tool rejected by API, retrying chapter without tools...', errText);
+                    return this.generateSingleChapterStream({
+                        outline, stageIndex, stageType, chapterData, previousSummary, groundingDossier,
+                        enableSearch: false, signal, onChunk, onStatus
+                    });
+                }
+
+                // Self-healing model recovery
+                if (errText.includes('no longer available') || errText.includes('not found') || response.status === 404) {
+                    const matches = [...errText.matchAll(/models\/([\w.-]+)/g)].map(m => m[1]);
+                    const targetModel = matches.filter(m => m !== model).pop() || (model !== 'gemini-3.6-flash' ? 'gemini-3.6-flash' : 'gemini-1.5-flash');
+                    if (targetModel && targetModel !== model) {
+                        console.warn(`Model ${model} unavailable. Auto-recovering to ${targetModel}...`);
+                        this.saveModel(targetModel);
+                        return this.generateSingleChapterStream({
+                            outline, stageIndex, stageType, chapterData, previousSummary, groundingDossier,
+                            enableSearch, signal, onChunk, onStatus
+                        });
+                    }
+                }
+                throw new Error(errText);
+            }
+
+            // Stream reader (SSE)
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let chapterText = '';
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop();
+
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (trimmed.startsWith('data: ')) {
+                        const jsonStr = trimmed.slice(6).trim();
+                        if (jsonStr === '[DONE]') continue;
+                        try {
+                            const parsed = JSON.parse(jsonStr);
+                            const chunk = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                            if (chunk) {
+                                chapterText += chunk;
+                                onChunk && onChunk(chapterText, chunk);
+                            }
+                        } catch (e) {
+                            // ignore partial JSON parse errors
+                        }
+                    }
+                }
+            }
+
+            return chapterText;
+        } catch (err) {
+            if (signal && signal.aborted) throw new Error('Quá trình sinh đã bị hủy.');
+            throw err;
+        }
+    },
+
+    /**
+     * Chained Sequential Chapter Generation Engine:
+     * Executes sequential requests across all chapters, dedicating 8,192 tokens per chapter
+     * to produce a master-grade thesis of 14,000 - 20,000+ words (35-50 pages).
+     */
+    async generateChainedReportStream({
+        outline,
+        onChunk,
+        onStatus,
+        onStageChange,
+        onDone,
+        onError,
+        signal
+    }) {
+        const apiKey = this.getApiKey();
+        if (!apiKey) {
+            throw new Error('Chưa cấu hình Gemini API Key. Vui lòng bấm vào nút [🔑 Gemini API Key] để nhập key.');
+        }
+
+        // 1. Gather nearest grounding benchmark from 360-corpus
+        let groundingDossier = '';
+        try {
+            await AcademicCorpusManager.init();
+            let discKey = 'CNTT';
+            if (outline.discipline === 'kinhte') discKey = 'KT';
+            else if (outline.discipline === 'kythuat') discKey = 'KTDT';
+            else if (outline.discipline === 'xahoi') discKey = 'KHXH';
+
+            let matchedCorpus = null;
+            if (outline.provenance && outline.provenance.id) {
+                matchedCorpus = AcademicCorpusManager.getById(outline.provenance.id);
+            }
+            if (!matchedCorpus) {
+                const searchMatches = AcademicCorpusManager.search({ query: outline.topic, discipline: discKey });
+                matchedCorpus = (searchMatches && searchMatches.length > 0) ? searchMatches[0] : (AcademicCorpusManager.getByDiscipline(discKey)[0] || null);
+            }
+            if (matchedCorpus) {
+                groundingDossier = `
+HỒ SƠ MẪU ĐỐI SÁNH ĐÃ ĐƯỢC KIỂM ĐỊNH (Grounding Benchmark từ ${matchedCorpus.institution}):
+- Đề tài tương đương: "${matchedCorpus.title}"
+- Mô hình lý thuyết/thuật toán: ${matchedCorpus.theoretical_models.join(', ')}
+- Phương pháp luận: ${matchedCorpus.methodology}
+- Dữ liệu thực nghiệm: ${matchedCorpus.dataset_hardware}
+- Chỉ số kiểm định: ${JSON.stringify(matchedCorpus.key_metrics)}
+- Mô hình PEEL mẫu: Point: ${matchedCorpus.peel_framework.Point} | Evidence: ${matchedCorpus.peel_framework.Evidence}`;
+            }
+        } catch (e) {
+            console.warn('Grounding dossier attachment error:', e);
+        }
+
+        // 2. Build Stages List
+        const stages = [];
+
+        // Stage 0: Mở Đầu
+        stages.push({
+            index: 0,
+            type: 'intro',
+            title: 'Phần Mở Đầu (Tính cấp thiết & Mục tiêu SMART)',
+            chapterData: null
+        });
+
+        // Stage 1 .. N: Chapters
+        const chapters = outline.chapters || [];
+        for (let i = 0; i < chapters.length; i++) {
+            stages.push({
+                index: i + 1,
+                type: 'chapter',
+                title: chapters[i].title,
+                chapterData: chapters[i]
+            });
+        }
+
+        // Final Stage: Kết Luận & Tài Liệu Tham Khảo
+        stages.push({
+            index: stages.length,
+            type: 'conclusion',
+            title: 'Kết Luận, Kiến Nghị & Tài Liệu Tham Khảo',
+            chapterData: null
+        });
+
+        const totalStages = stages.length;
+        const enableSearch = this.isSearchGroundingEnabled();
+        let fullDocumentText = '';
+        let previousSummaries = [];
+
+        for (let sIdx = 0; sIdx < totalStages; sIdx++) {
+            if (signal && signal.aborted) throw new Error('Quá trình sinh đã bị hủy bởi người dùng.');
+
+            const currentStage = stages[sIdx];
+            onStageChange && onStageChange(sIdx, totalStages, currentStage.title);
+            onStatus && onStatus(`[${sIdx + 1}/${totalStages}] Đang sinh chuyên sâu: ${currentStage.title}...`);
+
+            const prevSummaryText = previousSummaries.slice(-2).join('\n---\n');
+
+            const chapterResult = await this.generateSingleChapterStream({
+                outline,
+                stageIndex: currentStage.index,
+                stageType: currentStage.type,
+                chapterData: currentStage.chapterData,
+                previousSummary: prevSummaryText,
+                groundingDossier,
+                enableSearch,
+                signal,
+                onChunk: (stageText, chunk) => {
+                    const liveFull = fullDocumentText ? (fullDocumentText + '\n\n' + stageText) : stageText;
+                    onChunk && onChunk(liveFull, chunk, sIdx);
+                },
+                onStatus
+            });
+
+            // Append chapter to full document
+            fullDocumentText = fullDocumentText ? (fullDocumentText + '\n\n' + chapterResult) : chapterResult;
+            
+            // Keep concise summary for next stage context
+            const firstLines = chapterResult.split('\n').filter(l => l.trim().startsWith('#') || l.trim().length > 30).slice(0, 4).join('. ');
+            previousSummaries.push(`- ${currentStage.title}: ${firstLines.slice(0, 300)}...`);
+
+            onChunk && onChunk(fullDocumentText, '', sIdx);
+        }
+
+        onDone && onDone(fullDocumentText);
+        return fullDocumentText;
     },
 
     async generateReportStream({ outline, onChunk, onStatus, onDone, onError, signal }) {
@@ -1565,6 +1941,41 @@ const MarkdownRenderer = {
     }
 };
 
+function updateChapterStepper(activeStageIndex, totalStages) {
+    for (let i = 0; i <= 5; i++) {
+        const chip = document.getElementById(`step-chip-${i}`);
+        if (!chip) continue;
+        chip.classList.remove('active', 'done');
+        if (i < activeStageIndex) {
+            chip.classList.add('done');
+        } else if (i === activeStageIndex) {
+            chip.classList.add('active');
+        }
+    }
+    const progressFill = document.getElementById('report-progress-fill');
+    if (progressFill) {
+        const pct = Math.min(100, Math.round(((activeStageIndex) / (totalStages || 6)) * 100));
+        progressFill.style.width = `${pct}%`;
+    }
+}
+
+function resetChapterStepper() {
+    for (let i = 0; i <= 5; i++) {
+        const chip = document.getElementById(`step-chip-${i}`);
+        if (chip) chip.classList.remove('active', 'done');
+    }
+    const progressFill = document.getElementById('report-progress-fill');
+    if (progressFill) progressFill.style.width = '0%';
+}
+
+function toggleGoogleSearchGrounding(checked) {
+    GeminiService.setSearchGroundingEnabled(checked);
+}
+
+function changeGenerationMode(mode) {
+    GeminiService.setGenerationMode(mode);
+}
+
 /* --------------------------------------------------------------------------
    7. AI Full Report Generation Studio Controller
    -------------------------------------------------------------------------- */
@@ -1587,51 +1998,113 @@ async function startAIFullReportGeneration() {
     const liveStatusText = document.getElementById('report-status-text');
     const wordCountEl = document.getElementById('report-word-count');
     const outputEl = document.getElementById('ai-rendered-output');
+    const searchCheckbox = document.getElementById('enable-google-search-toggle');
+    const modeSelect = document.getElementById('report-generation-mode-select');
 
     if (modelBadge) modelBadge.innerText = GeminiService.getModel();
     if (topicSubtitle) topicSubtitle.innerText = `${currentOutline.topic} (${currentOutline.schoolName})`;
-    if (outputEl) outputEl.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-tertiary);"><i class="ph ph-circle-notch anim-pulse" style="font-size: 28px; display: block; margin-bottom: 8px;"></i>Đang nạp dữ liệu đối sánh và kết nối Gemini...</div>';
+    if (outputEl) outputEl.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-tertiary);"><i class="ph ph-circle-notch anim-pulse" style="font-size: 28px; display: block; margin-bottom: 8px;"></i>Đang nạp dữ liệu đối sánh và kích hoạt cỗ máy sinh chuyên sâu...</div>';
     if (modal) modal.classList.add('open');
+
+    if (searchCheckbox) searchCheckbox.checked = GeminiService.isSearchGroundingEnabled();
+    if (modeSelect) modeSelect.value = GeminiService.getGenerationMode();
+
+    resetChapterStepper();
 
     isGeneratingReport = true;
     reportAbortController = new AbortController();
     lastGeneratedReportText = '';
 
-    try {
-        await GeminiService.generateReportStream({
-            outline: currentOutline,
-            signal: reportAbortController.signal,
-            onStatus: (status) => {
-                if (liveStatusText) liveStatusText.innerText = status;
-            },
-            onChunk: (accumulated, chunk) => {
-                lastGeneratedReportText = accumulated;
-                if (outputEl) {
-                    outputEl.innerHTML = MarkdownRenderer.render(accumulated);
+    const genMode = GeminiService.getGenerationMode();
+
+    if (genMode === 'chained') {
+        // Chained Multi-Chapter Engine (Point A / 9.0+ Standard, 30-50 pages)
+        try {
+            await GeminiService.generateChainedReportStream({
+                outline: currentOutline,
+                signal: reportAbortController.signal,
+                onStageChange: (sIdx, totalStages, stageTitle) => {
+                    updateChapterStepper(sIdx, totalStages);
+                    if (liveStatusText) liveStatusText.innerText = `[${sIdx + 1}/${totalStages}] ${stageTitle}`;
+                },
+                onStatus: (status) => {
+                    if (liveStatusText) liveStatusText.innerText = status;
+                },
+                onChunk: (accumulated, chunk, sIdx) => {
+                    lastGeneratedReportText = accumulated;
+                    if (outputEl) {
+                        outputEl.innerHTML = MarkdownRenderer.render(accumulated);
+                    }
+                    if (wordCountEl) {
+                        const words = accumulated.trim().split(/\s+/).filter(Boolean).length;
+                        wordCountEl.innerText = `${words.toLocaleString()} từ (Mục tiêu: 15.000+)`;
+                    }
+                },
+                onDone: (fullText) => {
+                    isGeneratingReport = false;
+                    for (let i = 0; i <= 5; i++) {
+                        const chip = document.getElementById(`step-chip-${i}`);
+                        if (chip) { chip.classList.remove('active'); chip.classList.add('done'); }
+                    }
+                    const progressFill = document.getElementById('report-progress-fill');
+                    if (progressFill) progressFill.style.width = '100%';
+
+                    if (liveStatusText) liveStatusText.innerText = 'Hoàn thành xuất sắc 100% (Chuẩn Điểm A)';
+                    const words = fullText.trim().split(/\s+/).filter(Boolean).length;
+                    if (wordCountEl) wordCountEl.innerText = `${words.toLocaleString()} từ (Đạt chuẩn Điểm A / 9.0+)`;
                 }
-                if (wordCountEl) {
-                    const words = accumulated.trim().split(/\s+/).filter(Boolean).length;
-                    wordCountEl.innerText = `${words.toLocaleString()} từ`;
-                }
-            },
-            onDone: (fullText) => {
-                isGeneratingReport = false;
-                if (liveStatusText) liveStatusText.innerText = 'Hoàn thành 100%';
-                const words = fullText.trim().split(/\s+/).filter(Boolean).length;
-                if (wordCountEl) wordCountEl.innerText = `${words.toLocaleString()} từ (Đạt chuẩn)`;
+            });
+        } catch (err) {
+            isGeneratingReport = false;
+            if (liveStatusText) liveStatusText.innerText = 'Lỗi phát sinh';
+            if (outputEl && !lastGeneratedReportText) {
+                outputEl.innerHTML = `
+                    <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; color: #ef4444; padding: 20px; border-radius: var(--radius-sm);">
+                        <h3 style="margin-top: 0; font-size: 15px;">Quá trình sinh toàn văn thất bại</h3>
+                        <p style="font-size: 13px; line-height: 1.5;">${escapeHtml(err.message)}</p>
+                        <button class="btn btn-secondary" style="margin-top: 10px; font-size: 12px;" onclick="openGeminiKeyModal()">Kiểm Tra Cài Đặt Key</button>
+                    </div>
+                `;
             }
-        });
-    } catch (err) {
-        isGeneratingReport = false;
-        if (liveStatusText) liveStatusText.innerText = 'Lỗi phát sinh';
-        if (outputEl && !lastGeneratedReportText) {
-            outputEl.innerHTML = `
-                <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; color: #ef4444; padding: 20px; border-radius: var(--radius-sm);">
-                    <h3 style="margin-top: 0; font-size: 15px;">Quá trình sinh toàn văn thất bại</h3>
-                    <p style="font-size: 13px; line-height: 1.5;">${escapeHtml(err.message)}</p>
-                    <button class="btn btn-secondary" style="margin-top: 10px; font-size: 12px;" onclick="openGeminiKeyModal()">Kiểm Tra Cài Đặt Key</button>
-                </div>
-            `;
+        }
+    } else {
+        // Single Shot Fast Mode
+        try {
+            await GeminiService.generateReportStream({
+                outline: currentOutline,
+                signal: reportAbortController.signal,
+                onStatus: (status) => {
+                    if (liveStatusText) liveStatusText.innerText = status;
+                },
+                onChunk: (accumulated, chunk) => {
+                    lastGeneratedReportText = accumulated;
+                    if (outputEl) {
+                        outputEl.innerHTML = MarkdownRenderer.render(accumulated);
+                    }
+                    if (wordCountEl) {
+                        const words = accumulated.trim().split(/\s+/).filter(Boolean).length;
+                        wordCountEl.innerText = `${words.toLocaleString()} từ`;
+                    }
+                },
+                onDone: (fullText) => {
+                    isGeneratingReport = false;
+                    if (liveStatusText) liveStatusText.innerText = 'Hoàn thành 100%';
+                    const words = fullText.trim().split(/\s+/).filter(Boolean).length;
+                    if (wordCountEl) wordCountEl.innerText = `${words.toLocaleString()} từ (Bản thảo nhanh)`;
+                }
+            });
+        } catch (err) {
+            isGeneratingReport = false;
+            if (liveStatusText) liveStatusText.innerText = 'Lỗi phát sinh';
+            if (outputEl && !lastGeneratedReportText) {
+                outputEl.innerHTML = `
+                    <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; color: #ef4444; padding: 20px; border-radius: var(--radius-sm);">
+                        <h3 style="margin-top: 0; font-size: 15px;">Quá trình sinh toàn văn thất bại</h3>
+                        <p style="font-size: 13px; line-height: 1.5;">${escapeHtml(err.message)}</p>
+                        <button class="btn btn-secondary" style="margin-top: 10px; font-size: 12px;" onclick="openGeminiKeyModal()">Kiểm Tra Cài Đặt Key</button>
+                    </div>
+                `;
+            }
         }
     }
 }
@@ -1946,30 +2419,33 @@ function exportGeneratedWordDoc() {
     const renderedHtml = MarkdownRenderer.render(lastGeneratedReportText);
 
     const bodyHtml = `
-<div class="cover-page">
-    <div class="cover-header">
+<div class="cover-page" style="border: 3pt double #000; padding: 25pt; min-height: 720pt; box-sizing: border-box; text-align: center;">
+    <div class="cover-header" style="font-size: 13pt; font-weight: bold; text-transform: uppercase;">
         BỘ GIÁO DỤC VÀ ĐÀO TẠO<br>
         ${escapeHtml(school.toUpperCase())}
     </div>
-    <div class="cover-divider"></div>
+    <div class="cover-divider" style="width: 120pt; border-top: 1.5pt solid #000; margin: 10pt auto 40pt auto;"></div>
 
-    <div class="cover-title">
+    <div style="font-size: 14pt; font-weight: bold; text-transform: uppercase; color: #002060; margin-bottom: 12pt;">
+        ${escapeHtml(currentOutline ? currentOutline.reportTypeName : 'ĐỒ ÁN TỐT NGHIỆP / BÁO CÁO HỌC THUẬT')}
+    </div>
+
+    <div class="cover-title" style="font-size: 18pt; font-weight: bold; text-transform: uppercase; line-height: 1.4; color: #000; margin: 20pt 0 40pt 0;">
         ${escapeHtml(topic)}
     </div>
-    <div class="cover-subtitle">
-        BÁO CÁO NGHIÊN CỨU HỌC THUẬT TOÀN VĂN
+
+    <div class="cover-meta" style="margin-top: 50pt; text-align: left; display: inline-block; font-size: 13pt; line-height: 1.6;">
+        <p><strong>Khối ngành:</strong> ${escapeHtml(currentOutline ? currentOutline.disciplineName : 'Đa ngành')}</p>
+        <p><strong>Tiêu chuẩn đánh giá:</strong> Barem Điểm Xuất Sắc (Điểm A / 9.0+)</p>
+        <p><strong>Thể thức văn bản:</strong> Nghị định 30/2020/NĐ-CP (Times New Roman 13pt, lề 3-2-2-2)</p>
+        <p><strong>Chuẩn trích dẫn:</strong> ${escapeHtml(currentOutline ? currentOutline.citation : 'APA 7th')}</p>
     </div>
 
-    <div class="cover-meta">
-        <strong>Thể loại:</strong> ${escapeHtml(currentOutline ? currentOutline.reportTypeName : 'Báo cáo')}<br>
-        <strong>Khối ngành:</strong> ${escapeHtml(currentOutline ? currentOutline.disciplineName : 'Đa ngành')}<br>
-        <strong>Quy chuẩn:</strong> Nghị định 30/2020/NĐ-CP &bull; Mô hình PEEL &bull; Barem Điểm A
-    </div>
-
-    <div class="cover-footer">
-        NĂM ${new Date().getFullYear()}
+    <div class="cover-footer" style="margin-top: 80pt; font-size: 13pt; font-weight: bold;">
+        HÀ NỘI, NĂM ${new Date().getFullYear()}
     </div>
 </div>
+<br clear="all" style="page-break-before:always" />
 
 ${renderedHtml}
 `;

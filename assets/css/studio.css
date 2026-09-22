@@ -1097,6 +1097,101 @@
             animation: pulse-dot 1.5s infinite ease-in-out;
         }
 
+        /* Chapter Stepper & Advanced Generation Bar */
+        .chapter-stepper-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 16px;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            overflow-x: auto;
+            scrollbar-width: thin;
+        }
+        .chapter-step-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 10px;
+            border-radius: var(--radius-sm);
+            font-size: 11.5px;
+            font-weight: 600;
+            background: var(--bg-elevated);
+            color: var(--text-tertiary);
+            border: 1px solid var(--border);
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+        .chapter-step-chip.active {
+            background: rgba(14, 165, 233, 0.15);
+            color: var(--accent);
+            border-color: var(--accent);
+            box-shadow: 0 0 10px rgba(14, 165, 233, 0.2);
+        }
+        .chapter-step-chip.done {
+            background: rgba(16, 185, 129, 0.12);
+            color: #10b981;
+            border-color: rgba(16, 185, 129, 0.4);
+        }
+        .chapter-step-chip .step-num {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9.5px;
+            background: var(--bg-page);
+        }
+        .chapter-step-chip.active .step-num {
+            background: var(--accent);
+            color: #fff;
+        }
+        .chapter-step-chip.done .step-num {
+            background: #10b981;
+            color: #fff;
+        }
+
+        /* Generation Settings Strip */
+        .generation-settings-strip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 16px;
+            background: var(--bg-page);
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .search-grounding-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+            color: var(--text-secondary);
+            font-size: 11.5px;
+            font-weight: 500;
+        }
+        .search-grounding-toggle input {
+            cursor: pointer;
+            accent-color: var(--accent);
+        }
+        .report-progress-container {
+            width: 100%;
+            height: 3px;
+            background: var(--bg-elevated);
+            position: relative;
+            overflow: hidden;
+        }
+        .report-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent) 0%, #38bdf8 50%, #10b981 100%);
+            width: 0%;
+            transition: width 0.4s ease;
+        }
+
         /* Print formatting (Decree 30/2020/NĐ-CP Standard Margins) */
         @media print {
             body { background: #ffffff !important; color: #000000 !important; font-family: 'Times New Roman', Times, serif !important; }
