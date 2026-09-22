@@ -60,6 +60,26 @@
                 <span>Specification Input</span>
             </div>
 
+            <!-- Gemini AI Key Status Card in Sidebar -->
+            <div class="gemini-key-sidebar-card" onclick="openGeminiKeyModal()" title="Cài đặt Google Gemini API Key để AI kiến trúc khung sườn và sinh toàn văn báo cáo">
+                <div class="gemini-key-sidebar-left">
+                    <div class="gemini-key-icon-badge">
+                        <i class="ph-bold ph-key"></i>
+                    </div>
+                    <div style="overflow: hidden;">
+                        <div class="gemini-key-card-title">
+                            <span>Google Gemini AI</span>
+                            <span class="key-status-dot inactive" id="sidebar-key-dot"></span>
+                        </div>
+                        <div class="gemini-key-card-sub" id="sidebar-key-label">Chưa cắm Key (Bấm để kích hoạt AI)</div>
+                    </div>
+                </div>
+                <button type="button" class="btn-config-key" onclick="event.stopPropagation(); openGeminiKeyModal();">
+                    <i class="ph ph-sliders-horizontal"></i>
+                    <span>Cài Đặt</span>
+                </button>
+            </div>
+
             <form class="rail-form" onsubmit="handleFormSubmit(event)">
                 <div class="field-block">
                     <label class="field-label" for="disc-select">Khối Chuyên Ngành</label>

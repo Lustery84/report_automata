@@ -1243,18 +1243,27 @@ Hãy xuất bản toàn văn báo cáo bằng định dạng Markdown hoàn ch�
 function updateKeyStatusDot() {
     const dot = document.getElementById('header-key-dot');
     const label = document.getElementById('header-key-label');
+    const sidebarDot = document.getElementById('sidebar-key-dot');
+    const sidebarLabel = document.getElementById('sidebar-key-label');
     const key = GeminiService.getApiKey();
+    const model = GeminiService.getModel();
+
+    const isConnected = key && key.trim().length > 5;
 
     if (dot) {
-        if (key && key.length > 5) {
-            dot.className = 'key-status-dot active';
-            dot.title = 'Gemini API Key: Đã kết nối';
-            if (label) label.innerText = 'Gemini Sẵn Sàng';
-        } else {
-            dot.className = 'key-status-dot inactive';
-            dot.title = 'Gemini API Key: Chưa cấu hình (Bấm để thêm key)';
-            if (label) label.innerText = 'Cắm Key Gemini';
-        }
+        dot.className = isConnected ? 'key-status-dot active' : 'key-status-dot inactive';
+        dot.title = isConnected ? `Gemini API Key: Đã kết nối (${model})` : 'Gemini API Key: Chưa cấu hình (Bấm để thêm key)';
+    }
+    if (label) {
+        label.innerText = isConnected ? 'Gemini Sẵn Sàng' : 'Cắm Key Gemini';
+    }
+
+    if (sidebarDot) {
+        sidebarDot.className = isConnected ? 'key-status-dot active' : 'key-status-dot inactive';
+    }
+    if (sidebarLabel) {
+        sidebarLabel.innerText = isConnected ? `Đã kết nối • ${model}` : 'Chưa cắm Key (Bấm để kích hoạt AI)';
+        sidebarLabel.style.color = isConnected ? '#10b981' : 'var(--text-tertiary)';
     }
 }
 
