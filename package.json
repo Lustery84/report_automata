@@ -4,9 +4,9 @@
   "description": "Universal Academic & Technical Report Outline Studio with 360+ Benchmarks",
   "main": "index.html",
   "scripts": {
-    "start": "npx serve -l 3000 .",
-    "dev": "npx serve -l 3000 .",
-    "serve:py": "python -m http.server 3000",
+    "start": "node server.js",
+    "dev": "node server.js",
+    "serve:py": "python -m http.server 8000",
     "lint": "node -c assets/js/data-templates.js && node -c assets/js/studio-app.js",
     "test": "npm run lint"
   },
