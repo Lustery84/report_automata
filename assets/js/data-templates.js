@@ -325,8 +325,8 @@ class OutlineGeneratorEngine {
 
         // 1. Check if Gemini API Key is available
         const effectiveKey = apiKey || (typeof GeminiService !== 'undefined' ? GeminiService.getApiKey() : '');
-        let effectiveModel = model || (typeof GeminiService !== 'undefined' ? GeminiService.getModel() : 'gemini-2.5-flash');
-        if (effectiveModel === 'gemini-2.0-flash') effectiveModel = 'gemini-2.5-flash';
+        let effectiveModel = model || (typeof GeminiService !== 'undefined' ? GeminiService.getModel() : 'gemini-3.6-flash');
+        if (effectiveModel.includes('2.0-flash') || effectiveModel.includes('2.5-flash')) effectiveModel = 'gemini-3.6-flash';
 
         // 2. If Gemini API Key exists, generate a 100% bespoke outline via AI
         if (effectiveKey && effectiveKey.trim() !== '') {
@@ -396,7 +396,7 @@ class OutlineGeneratorEngine {
         customNotes,
         attachments = [],
         apiKey,
-        model = 'gemini-2.5-flash',
+        model = 'gemini-3.6-flash',
         benchmarkItem = null
     }) {
         await AcademicCorpusManager.init();
@@ -497,7 +497,7 @@ BẮT BUỘC TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG VIẾT B�
             }
         }
 
-        let safeModel = (model && model !== 'gemini-2.0-flash') ? model : 'gemini-2.5-flash';
+        let safeModel = (model && !model.includes('2.0-flash') && !model.includes('2.5-flash')) ? model : 'gemini-3.6-flash';
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${safeModel}:generateContent?key=${apiKey}`;
         const requestBody = {
             contents: [{ parts }],
@@ -517,9 +517,9 @@ BẮT BUỘC TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON HỢP LỆ (KHÔNG VIẾT B�
         if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
             const errMsg = errData.error?.message || `Lỗi HTTP ${res.status}: ${res.statusText}`;
-            if (errMsg.includes('no longer available') || errMsg.includes('not found')) {
-                const match = errMsg.match(/models\/(gemini-[\w.-]+)/);
-                const recModel = match ? match[1] : (safeModel !== 'gemini-2.5-flash' ? 'gemini-2.5-flash' : 'gemini-1.5-flash');
+            if (errMsg.includes('no longer available') || errMsg.includes('not found') || res.status === 404) {
+                const matches = [...errMsg.matchAll(/models\/([\w.-]+)/g)].map(m => m[1]);
+                const recModel = matches.filter(m => m !== safeModel).pop() || (safeModel !== 'gemini-3.6-flash' ? 'gemini-3.6-flash' : 'gemini-1.5-flash');
                 if (recModel && recModel !== safeModel) {
                     console.warn(`[OutlineEngine] Auto-recovering model to ${recModel}...`);
                     return this.generateOutlineWithAI({
