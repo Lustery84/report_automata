@@ -93,9 +93,21 @@
                 </div>
 
                 <div class="field-block">
-                    <label class="field-label" for="notes-input">Yêu Cầu Riêng / Ràng Buộc Kỹ Thuật</label>
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                        <label class="field-label" for="notes-input" style="margin-bottom: 0;">Yêu Cầu Riêng / Ràng Buộc Kỹ Thuật</label>
+                        <button type="button" class="btn-attach-trigger" onclick="document.getElementById('attachment-file-input').click()" title="Đính kèm ảnh, PDF hoặc dữ liệu">
+                            <i class="ph ph-paperclip"></i>
+                            <span>Thêm File / Ảnh</span>
+                        </button>
+                    </div>
                     <textarea class="field-textarea" id="notes-input" 
-                              placeholder="Số trang, mô hình bắt buộc, dữ liệu đã có sẵn..."></textarea>
+                              placeholder="Số trang, mô hình, dữ liệu đã có sẵn... (Hỗ trợ kéo thả hoặc bấm Ctrl+V dán ảnh trực tiếp vào đây)"></textarea>
+                    
+                    <input type="file" id="attachment-file-input" multiple 
+                           accept="image/*,.pdf,.txt,.csv,.json,.py,.kt,.java,.cpp,.c,.cs,.sql,.html,.css,.js,.md" 
+                           style="display: none;" onchange="handleAttachmentFileSelect(this)">
+
+                    <div id="attachments-tray" class="attachments-tray" style="display: none;"></div>
                 </div>
 
                 <button type="submit" class="btn btn-accent" style="width: 100%; padding: 11px;">
@@ -311,9 +323,9 @@
                 <div class="field-block" style="margin-top: 14px;">
                     <label class="field-label" for="gemini-model-select">Mô Hình Trí Tuệ Nhân Tạo (AI Model)</label>
                     <select class="field-select" id="gemini-model-select">
-                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Khuyên dùng - Siêu tốc, Miễn phí cao)</option>
+                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Khuyên dùng - Siêu tốc, Miễn phí cao, Ổn định)</option>
                         <option value="gemini-1.5-pro">Gemini 1.5 Pro (Chuyên sâu học thuật, Lý luận logic cao, Context 2M)</option>
-                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Thử nghiệm thế hệ mới)</option>
+                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (Bản nhẹ, Tốc độ cao, Hạn mức lớn)</option>
                     </select>
                 </div>
 

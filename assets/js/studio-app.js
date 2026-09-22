@@ -39,7 +39,10 @@ async function initApp() {
     // 4. Update Gemini API Key status indicator
     updateKeyStatusDot();
 
-    // 5. Restore active outline or show empty canvas
+    // 5. Initialize Attachment drag, drop and clipboard paste
+    AttachmentManager.init();
+
+    // 6. Restore active outline or show empty canvas
     const active = OutlineGeneratorEngine.getActiveOutline();
     if (active) {
         renderOutlineCanvas(active);
@@ -71,6 +74,214 @@ function escapeHtml(text) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+}
+
+/* --------------------------------------------------------------------------
+   Attachment & Multimodal Input Manager (Images, PDFs, Data/Code files)
+   -------------------------------------------------------------------------- */
+const AttachmentManager = {
+    attachments: [],
+
+    init() {
+        const dropZone = document.getElementById('notes-input');
+        if (!dropZone) return;
+
+        ['dragenter', 'dragover'].forEach(name => {
+            dropZone.addEventListener(name, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.style.borderColor = 'var(--accent)';
+                dropZone.style.background = 'var(--accent-subtle)';
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(name => {
+            dropZone.addEventListener(name, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.style.borderColor = '';
+                dropZone.style.background = '';
+            });
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            if (files && files.length > 0) {
+                this.addFiles(files);
+            }
+        });
+
+        dropZone.addEventListener('paste', (e) => {
+            const items = (e.clipboardData || window.clipboardData)?.items;
+            if (!items) return;
+            const filesToHandle = [];
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const blob = items[i].getAsFile();
+                    if (blob) {
+                        const now = new Date();
+                        const pad = (n) => String(n).padStart(2, '0');
+                        const name = `anh_dan_${pad(now.getHours())}h${pad(now.getMinutes())}m${pad(now.getSeconds())}s.png`;
+                        const f = new File([blob], name, { type: blob.type });
+                        filesToHandle.push(f);
+                    }
+                }
+            }
+            if (filesToHandle.length > 0) {
+                this.addFiles(filesToHandle);
+            }
+        });
+    },
+
+    getAttachments() {
+        return this.attachments;
+    },
+
+    async addFiles(files) {
+        if (!files || files.length === 0) return;
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            if (this.attachments.some(a => a.name === file.name && a.size === file.size)) {
+                continue;
+            }
+
+            if (file.size > 20 * 1024 * 1024) {
+                alert(`Tệp "${file.name}" vượt quá dung lượng tối đa 20MB.`);
+                continue;
+            }
+
+            try {
+                const item = await this.processFile(file);
+                if (item) {
+                    this.attachments.push(item);
+                }
+            } catch (err) {
+                console.warn('Lỗi đọc tệp đính kèm:', file.name, err);
+            }
+        }
+
+        this.renderTray();
+    },
+
+    processFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            const id = 'att_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+            const isImage = file.type.startsWith('image/');
+            const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+            const isText = file.type.startsWith('text/') || 
+                /\.(txt|csv|json|md|py|kt|java|cpp|c|cs|sql|html|css|js|ts|xml|yaml|yml)$/i.test(file.name);
+
+            if (isImage || isPdf) {
+                reader.onload = (e) => {
+                    const dataUrl = e.target.result;
+                    const base64Data = dataUrl.split(',')[1];
+                    const mimeType = file.type || (isPdf ? 'application/pdf' : 'image/jpeg');
+
+                    resolve({
+                        id,
+                        name: file.name,
+                        size: file.size,
+                        formattedSize: formatFileSize(file.size),
+                        mimeType,
+                        dataUrl,
+                        base64Data,
+                        isImage,
+                        isPdf,
+                        isText: false
+                    });
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            } else if (isText) {
+                reader.onload = (e) => {
+                    resolve({
+                        id,
+                        name: file.name,
+                        size: file.size,
+                        formattedSize: formatFileSize(file.size),
+                        mimeType: file.type || 'text/plain',
+                        textContent: e.target.result,
+                        isImage: false,
+                        isPdf: false,
+                        isText: true
+                    });
+                };
+                reader.onerror = reject;
+                reader.readAsText(file, 'utf-8');
+            } else {
+                alert(`Tệp "${file.name}" là định dạng nhị phân chưa hỗ trợ đọc trực tiếp. Bạn nên lưu sang file PDF hoặc copy/paste nội dung vào ô để AI tiếp nhận tốt nhất.`);
+                resolve(null);
+            }
+        });
+    },
+
+    remove(id) {
+        this.attachments = this.attachments.filter(a => a.id !== id);
+        this.renderTray();
+    },
+
+    clear() {
+        this.attachments = [];
+        this.renderTray();
+    },
+
+    renderTray() {
+        const tray = document.getElementById('attachments-tray');
+        if (!tray) return;
+
+        if (this.attachments.length === 0) {
+            tray.style.display = 'none';
+            tray.innerHTML = '';
+            return;
+        }
+
+        tray.style.display = 'flex';
+        tray.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                <span style="font-size: 11px; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 4px;">
+                    <i class="ph ph-paperclip"></i>
+                    Đã nạp ${this.attachments.length} tệp/ảnh vào bộ nhớ AI
+                </span>
+                <button type="button" style="background: none; border: none; font-size: 10.5px; color: var(--text-tertiary); cursor: pointer;" onclick="AttachmentManager.clear()">Xóa hết</button>
+            </div>
+        ` + this.attachments.map(att => `
+            <div class="attachment-chip">
+                <div class="attachment-chip-info">
+                    ${att.isImage ? `
+                        <img src="${att.dataUrl}" class="attachment-chip-thumb" alt="thumbnail">
+                    ` : `
+                        <div class="attachment-chip-icon">
+                            <i class="${att.isPdf ? 'ph ph-file-pdf' : 'ph ph-file-text'}"></i>
+                        </div>
+                    `}
+                    <div style="overflow: hidden;">
+                        <div class="attachment-chip-name" title="${escapeHtml(att.name)}">${escapeHtml(att.name)}</div>
+                        <div class="attachment-chip-meta">${att.formattedSize} &bull; ${att.isImage ? 'Ảnh (Diagram/Chart)' : (att.isPdf ? 'Tài liệu PDF' : 'Dữ liệu/Mã nguồn')}</div>
+                    </div>
+                </div>
+                <button type="button" class="attachment-chip-del" onclick="AttachmentManager.remove('${att.id}')" title="Gỡ bỏ tệp này">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+        `).join('');
+    }
+};
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function handleAttachmentFileSelect(input) {
+    if (input && input.files) {
+        AttachmentManager.addFiles(input.files);
+        input.value = '';
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -114,12 +325,19 @@ function handleFormSubmit(e) {
     const schoolName = document.getElementById('school-input').value;
     const customNotes = document.getElementById('notes-input').value;
 
+    const attachments = AttachmentManager.getAttachments();
+    let effectiveNotes = customNotes;
+    if (attachments.length > 0) {
+        const attNames = attachments.map(a => `${a.name} (${a.isImage ? 'Ảnh' : (a.isPdf ? 'PDF' : 'Dữ liệu')})`).join(', ');
+        effectiveNotes = (customNotes ? customNotes + ' | ' : '') + `Tệp/ảnh đính kèm: ${attNames}`;
+    }
+
     const generated = OutlineGeneratorEngine.generateOutline({
         topic,
         discipline,
         schoolName,
         reportType,
-        customNotes
+        customNotes: effectiveNotes
     });
 
     renderOutlineCanvas(generated);
@@ -192,6 +410,7 @@ function showEmptyCanvas() {
 
 function newOutlineSession() {
     OutlineGeneratorEngine.clearActiveOutline();
+    AttachmentManager.clear();
     document.getElementById('topic-input').value = '';
     document.getElementById('notes-input').value = '';
     showEmptyCanvas();
@@ -623,16 +842,24 @@ const GeminiService = {
     },
 
     getModel() {
-        return localStorage.getItem(this.STORAGE_MODEL) || 'gemini-2.0-flash';
+        const saved = localStorage.getItem(this.STORAGE_MODEL);
+        if (!saved || saved === 'gemini-2.5-flash' || saved.includes('2.5')) {
+            localStorage.setItem(this.STORAGE_MODEL, 'gemini-2.0-flash');
+            return 'gemini-2.0-flash';
+        }
+        return saved;
     },
 
     saveModel(model) {
-        localStorage.setItem(this.STORAGE_MODEL, model || 'gemini-2.0-flash');
+        let safeModel = model || 'gemini-2.0-flash';
+        if (safeModel.includes('2.5')) safeModel = 'gemini-2.0-flash';
+        localStorage.setItem(this.STORAGE_MODEL, safeModel);
     },
 
     async testConnection(key, model) {
         const apiKey = (key || this.getApiKey()).trim();
-        const apiModel = model || this.getModel();
+        let apiModel = model || this.getModel();
+        if (apiModel.includes('2.5')) apiModel = 'gemini-2.0-flash';
 
         if (!apiKey) {
             throw new Error('Vui lòng nhập API Key trước khi kiểm tra.');
@@ -671,7 +898,11 @@ const GeminiService = {
 
     async generateReportStream({ outline, onChunk, onStatus, onDone, onError, signal }) {
         const apiKey = this.getApiKey();
-        const model = this.getModel();
+        let model = this.getModel();
+        if (model.includes('2.5')) {
+            model = 'gemini-2.0-flash';
+            this.saveModel('gemini-2.0-flash');
+        }
 
         if (!apiKey) {
             throw new Error('Chưa cấu hình Gemini API Key. Vui lòng bấm vào nút [🔑 Gemini API Key] để nhập key.');
@@ -725,7 +956,9 @@ CÁC NGUYÊN TẮC BẮT BUỘC TUÂN THỦ:
 3. MÔ HÌNH ĐOẠN VĂN CHUYÊN SÂU PEEL (Point - Explanation - Evidence - Link):
    - Mọi phân tích chuyên sâu phải có: Luận điểm -> Giải thích nguyên lý -> Dẫn chứng số liệu định lượng thực tế -> Tiểu kết tác động.
 4. NGÔI VĂN & VĂN PHONG:
-   - Sử dụng ngôi thứ ba khách quan ("tác giả", "người nghiên cứu", "đề tài"). Không dùng "tôi", "chúng tôi".`;
+   - Sử dụng ngôi thứ ba khách quan ("tác giả", "người nghiên cứu", "đề tài"). Không dùng "tôi", "chúng tôi".
+5. KHAI THÁC TOÀN DIỆN TỆP & ẢNH ĐÍNH KÈM (MULTIMODAL GROUNDING):
+   - Nếu người dùng có gửi kèm tệp (ảnh sơ đồ kiến trúc, lưu đồ giải thuật, bảng mạch, ảnh chụp biểu đồ tài chính, file PDF hoặc mã nguồn), BẮT BUỘC bạn phải trích xuất các thông số, số liệu, cơ chế vận hành từ các hình ảnh/tệp này để đưa vào phân tích chuyên sâu tại Chương 2 (Thực trạng) và Chương 3 (Giải pháp).`;
 
         // 3. User Prompt Payload
         const userPrompt = `Hãy viết một BÁO CÁO TOÀN VĂN HỌC THUẬT HOÀN CHỈNH, CHUYÊN SÂU cho đề tài sau:
@@ -758,11 +991,36 @@ Hãy xuất bản toàn văn báo cáo bằng định dạng Markdown hoàn ch�
 
         const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
 
+        // Construct Multimodal Request Parts
+        const requestParts = [];
+
+        // 1. Attach multimodal files (Images, PDFs, Data/Code files)
+        const attachments = AttachmentManager.getAttachments();
+        if (attachments && attachments.length > 0) {
+            for (const att of attachments) {
+                if (att.isImage || att.isPdf) {
+                    requestParts.push({
+                        inlineData: {
+                            mimeType: att.mimeType,
+                            data: att.base64Data
+                        }
+                    });
+                } else if (att.isText) {
+                    requestParts.push({
+                        text: `\n\n--- DỮ LIỆU TỆP ĐÍNH KÈM [${att.name}] ---\n${att.textContent}\n--- HẾT TỆP [${att.name}] ---\n\n`
+                    });
+                }
+            }
+        }
+
+        // 2. Attach main instruction text
+        requestParts.push({ text: userPrompt });
+
         const requestBody = {
             contents: [
                 {
                     role: 'user',
-                    parts: [{ text: userPrompt }]
+                    parts: requestParts
                 }
             ],
             systemInstruction: {
@@ -786,6 +1044,18 @@ Hãy xuất bản toàn văn báo cáo bằng định dạng Markdown hoàn ch�
             if (!response.ok) {
                 const errJson = await response.json().catch(() => ({}));
                 const errText = errJson.error?.message || `Lỗi HTTP ${response.status}: ${response.statusText}`;
+
+                // Self-healing: if model is deprecated or not available, auto-fallback to gemini-2.0-flash
+                if ((errText.includes('no longer available') || errText.includes('not found') || response.status === 404) && model !== 'gemini-2.0-flash') {
+                    console.warn(`Model ${model} unavailable (${errText}). Auto-recovering to gemini-2.0-flash...`);
+                    onStatus && onStatus('Đang tự động chuyển sang model chuẩn Gemini 2.0 Flash...');
+                    this.saveModel('gemini-2.0-flash');
+                    const badge = document.getElementById('report-generation-model-badge');
+                    if (badge) badge.innerText = 'Gemini 2.0 Flash';
+                    const select = document.getElementById('gemini-model-select');
+                    if (select) select.value = 'gemini-2.0-flash';
+                    return this.generateReportStream({ outline, onChunk, onStatus, onDone, onError, signal });
+                }
                 throw new Error(errText);
             }
 
@@ -845,7 +1115,13 @@ Hãy xuất bản toàn văn báo cáo bằng định dạng Markdown hoàn ch�
 
             if (!stdRes.ok) {
                 const stdErr = await stdRes.json().catch(() => ({}));
-                throw new Error(stdErr.error?.message || streamErr.message);
+                const stdErrMsg = stdErr.error?.message || streamErr.message;
+                if ((stdErrMsg.includes('no longer available') || stdErrMsg.includes('not found')) && model !== 'gemini-2.0-flash') {
+                    console.warn(`Fallback: Model ${model} unavailable, auto-recovering to gemini-2.0-flash...`);
+                    this.saveModel('gemini-2.0-flash');
+                    return this.generateReportStream({ outline, onChunk, onStatus, onDone, onError, signal });
+                }
+                throw new Error(stdErrMsg);
             }
 
             const stdData = await stdRes.json();

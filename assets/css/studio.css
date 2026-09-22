@@ -264,6 +264,104 @@
             border-color: var(--border-hover);
         }
 
+        /* Multimodal Attachment Styling */
+        .btn-attach-trigger {
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xs);
+            color: var(--accent);
+            font-size: 11px;
+            font-family: var(--font-sans);
+            padding: 3px 8px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.15s ease;
+        }
+        .btn-attach-trigger:hover {
+            background: var(--accent-subtle);
+            border-color: var(--accent);
+        }
+
+        .attachments-tray {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 8px;
+            padding: 8px;
+            background: var(--bg-elevated);
+            border: 1px dashed var(--border);
+            border-radius: var(--radius-xs);
+            transition: border-color 0.2s;
+        }
+
+        .attachment-chip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xs);
+            padding: 6px 10px;
+            font-size: 11.5px;
+        }
+        .attachment-chip-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            overflow: hidden;
+        }
+        .attachment-chip-thumb {
+            width: 32px;
+            height: 32px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .attachment-chip-icon {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--accent-subtle);
+            color: var(--accent);
+            border-radius: 4px;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+        .attachment-chip-name {
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 190px;
+        }
+        .attachment-chip-meta {
+            font-size: 10px;
+            color: var(--text-tertiary);
+            font-family: var(--font-mono);
+        }
+        .attachment-chip-del {
+            background: none;
+            border: none;
+            color: var(--text-tertiary);
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px;
+            border-radius: 3px;
+            transition: color 0.15s, background 0.15s;
+        }
+        .attachment-chip-del:hover {
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+
         /* Sample Quick-Pick Topics */
         .sample-chips-label {
             font-size: 11px;
